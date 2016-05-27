@@ -1,4 +1,4 @@
-// from https://glebbahmutov.com/blog/node-server-with-rx-and-cycle/ under MIT License
+// from https://glebbahmutov.com/blog/node-server-with-rx-and-cycle/ (also on Github @ bahmutov/node-rx-cycle) under MIT License
 const Rx = require('rx');
 // pure
 function main(sources) {
