@@ -27,49 +27,45 @@ function makeGithubConnection() {
         }
     };
     
-    var events;
+    var data = [];
     
     request.
         get(options).
         on('error', function(err) {
             if(err.code === 'ETIMEDOUT') {
-                console.log('timeout at server');
+                //console.log('timeout at server');
             } else {
-                console.log('error occurred: ' + err);
+                //console.log('error occurred: ' + err);
             }
         }).
         on('response', function(response) {
             if(response.statusCode === 200) {
-                console.log('status code correct');
+                //console.log('status code correct');
             } else {
-                console.log('incorrect status code: ' + response.statusCode);
+                //console.log('incorrect status code: ' + response.statusCode);
             }
         }).
         on('data', function(chunk) {
-            console.log('events received');
-            events += chunk;
+            console.log('received: ' + chunk);
+            data += chunk;
         }).
         on('end', function() {
-            filterOnRegexp(events);
+            filterOnRegex(data, regex);
+            console.log('----------------end------------------------------');
         });
 }
 
-function filterOnRegexp(events) {
-    const results = [];
+function filterOnRegex(data, regex) {
+    var results = [];
     console.log('filteronregexp');
-    console.log(events);
-    //const x = '[{"id": "4070352487","type": "PushEvent","actor": {"id": 6671138},"repo": {"id": 59820930},"payload": {"push_id": 1131920416,"size": 1}}]';
-    //console.log(typeof(events));
-    //console.log(JSON.parse(events));
-    //const data = JSON.parse(x);
-    /*
+    const events = JSON.parse(data);
+    var stream = events.
         filter(function(event) {
-            console.log('push');
             return event.type == PUSHEVENT;
         }).
         map(function(event) {
             results += event.payload;
             console.log('done');
         });
-    console.log(results);*/
+    console.log(results);
 }
