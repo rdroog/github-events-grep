@@ -141,15 +141,12 @@ function filterOnRegexp(events, regexp, res) {
     console.log('filteronregexp');
     var results = [];
     
-    if(standard) {
-        //TODO
-    }
-    
-    if(custom) {
-        events.
-            forEach(function(event) {
-                var matched = false;
-                
+    events.
+        forEach(function(event) {
+            var matched = false;
+            
+            // API call is for custom (payload) part
+            if(custom) {
                 //Deprecated events not shown below, non-visible events are, but not used.
                 if(event.type === 'CommitCommentEvent' || event.type === 'IssueCommentEvent' || event.type === 'PullRequestReviewCommentEvent') {
                     result = regexp.test(event.payload.comment.body);
@@ -224,14 +221,24 @@ function filterOnRegexp(events, regexp, res) {
                 } else {
                     console.log('Event type not used: ' + event.type);
                 }
-                
-                if(matched) {
-                    console.log('match');
-                    results.push(event);
-                } else {
-                    console.log('no match');
-                }
-            });
-    }
+            }
+            
+            // API call is for standard part
+            if(standard) {
+                const eventWithoutPayload = JSON.parse(JSON.stringify(event));
+                delete eventWithoutPayload.payload;
+                result = regexp.test(eventWithoutPayload);
+                matched = matched || result;
+            }
+             
+            // If this event is matched, add it to results
+            if(matched) {
+                console.log('match');
+                results.push(event);
+            } else {
+                console.log('no match');
+            }
+        });
+    
     res.end(JSON.stringify(results, null, '  '));
 }
