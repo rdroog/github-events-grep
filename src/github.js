@@ -170,8 +170,8 @@ function filterOnRegexp(events, APIInfo, res) {
             var matched = false;
             
             if(!event.payload || JSON.stringify(event.payload) == '{}'){
-                logger(0, 'Event had no payload'); 
-                logger(0, event);
+                logger(8, 'Event had no payload'); 
+                logger(8, event);
             } else {
                 // API call is for custom (payload) part
                 if(APIInfo.custom) {
@@ -344,6 +344,8 @@ function nextGithubRequest(options) {
             on('response', function(response) {
                 if(response.statusCode === 200) {
                     logger(1, 'github status code correct (' + response.statusCode + ')');
+                } else if(response.statusCode === 304) {
+                    logger(0, 'not modified since last request');
                 } else {
                     logger(0, 'incorrect github status code: ' + response.statusCode);
                 }
@@ -379,8 +381,10 @@ function getNextGithubRequestAt(headers) {
     const calculation = (rateReset - now) / rateRemaining;
     
     var nextRequestIn;
-    
-    if(calculation == 'NaN') {
+    calculation = 1 / 0;
+    if(!pollinterval) {
+        nextRequestIn = 1000;
+    } else if(calculation == 'NaN') {
         nextRequestIn = pollinterval/1000;
     } else {
         nextRequestIn = Math.max(pollinterval/1000, calculation);
@@ -395,6 +399,7 @@ function getNextGithubRequestAt(headers) {
     logger(8, 'x-ratelimit-remaining: ' + rateRemaining);
     logger(8, 'x-ratelimit-reset: ' + rateReset.toUTCString()  + ' (UTC)');
     logger(8, 'calculated next request in: ' + nextRequestIn  + ' ms');
+    logger(8, 'calculation: ' + calculation);
     
     logger(4, 'next github request at: ' + nextDate.toUTCString()  + ' (UTC)');
 }
