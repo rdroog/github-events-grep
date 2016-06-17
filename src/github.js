@@ -29,15 +29,30 @@ var etag;
 // Creates the basic server, above per request, below per server
 http.createServer((req, res) => {
     logger(0, 'Request received from client');
-    res.writeHead(200, { 'Content-Type': 'text/plain' });
+    res.writeHead(200, { 'Content-Type': 'text/plain');
     
-    APIInfo = getAPIInfo(req.url);
-    logger(9, 'APIInfo received');
-    
-    if(APIInfo.error) {
-        res.end(APIInfo);
+    if(req.url === '/ui') {
+        logger(0, req.url);
+        fs.readFile('github.html', "binary", function(err, file) {
+            if(err) {
+                response.writeHead(500, {"Content-Type": "text/plain"});
+                response.write(err + "\n");
+                response.end();
+                return;
+            }
+            res.writeHead(200);
+            res.write(file, "binary");
+        });
     } else {
-        filterEvents(APIInfo, res);
+        logger(0, req.url);
+        APIInfo = getAPIInfo(req.url);
+        logger(9, 'APIInfo received');
+        
+        if(APIInfo.error) {
+            res.end(APIInfo);
+        } else {
+            filterEvents(APIInfo, res);
+        }
     }
 }).listen(port, hostname, () => {
     logger(0, `Server running at http://${hostname}:${port}/`);
@@ -154,7 +169,7 @@ function filterOnRegexp(events, APIInfo, res) {
         forEach(function(event) {
             var matched = false;
             
-            if(event.payload) {
+            if(event.payload || event.payload == '{}') {
                 // API call is for custom (payload) part
                 if(APIInfo.custom) {
                     logger(9, 'Searching through custom...'); 

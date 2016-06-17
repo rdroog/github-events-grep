@@ -1,0 +1,87 @@
+<html>
+<body>
+    <script>
+    function search() {
+        var parts = document.getElementsByName('part');
+        var part;
+        for(i=0; i < parts.length; i++) {
+            if(parts[i].checked === true )
+            {
+                part = parts[i].value;
+            }
+        }
+        var calls = document.getElementsByName('call');
+        var call;
+        for(i=0; i < calls.length; i++) {
+            if(calls[i].checked === true )
+            {
+                call = calls[i].value;
+            }
+        }
+
+        const event_type = document.getElementById("event_type").value;
+        const regexp = document.getElementById("regexp").value;
+        
+        callToAPI(part, call, event_type, regexp);
+    }
+
+    function callToAPI(part, call, event_type, regexp){
+        var request = new XMLHttpRequest();
+        var url;
+        if(call === 'one') { 
+            url = "/" + part + "/" + call + "/" + event_type + "/" + regexp;
+        } else {
+            url = "/" + part + "/" + call + "/" + regexp;
+        }
+        url = "http://127.0.0.1:1337" + url;
+        request.onreadystatechange = function() {
+            if (request.readyState === 4) {
+                if (request.status === 200) {
+                    document.getElementById('result').value = request.response;
+                } else {
+                    document.getElementById('result').value = "{error : 'unknown error occurred'}'";
+                }
+            }
+        };
+        
+        request.open("GET", url, true);
+        request.send(null);
+    }
+    </script>
+    
+    <p>
+        Search in 'payload'-part, 'standard'-part or both:
+        <input type="radio" name="part" value="both" checked>Both 'payload'-part and 'standard'-part</option>
+        <input type="radio" name="part" value="payload">Only 'payload'-part</option>
+        <input type="radio" name="part" value="standard">Only 'standard'-part</option>
+    </p>
+
+    <p>
+        All or one event(s):
+        <input type="radio" name="call" value="all" checked>All events</option>
+        <input type="radio" name="call" value="one">One event (fill in EventType as well)</option>
+    </p>
+
+    <p>
+        Event type (only applicable if 'one event' is chosen): 
+        <input type="text" id="event_type">
+    </p>
+
+    <p>
+        Regular expression: 
+        <input type="text" id="regexp">
+    </p>
+
+    <p>
+        <button type="button" onclick="search()">Search through Github events</button>
+    </p>
+
+    <p>
+        Result (in JSON):
+    </p>
+    
+    <p>
+        <textarea id="result" rows="10" cols="30">{ error : 'No result yet' }</textarea>
+    </p>
+</body>
+</html>
