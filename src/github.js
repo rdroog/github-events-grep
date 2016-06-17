@@ -4,38 +4,58 @@ const Rx = require('rx');
 const DOM = require('rx-dom');
 const RxNode = require('rx-node');
 const request = require('request');
+const run = require('gen-run');
 
 const hostname = '127.0.0.1';
 const port = 1337;
 
+/* Deprecated because otherwise it cannot handle more than 1 request concurrently. */
 /* Parts on which the call should be executed*/
-var custom = false;
-var standard = false;
+//var custom = false;
+//var standard = false;
+// Only used if the API call is one event.
+//var APIEvent;
 
 /* Type of API call */
-var APICall;
+//var APICall;
 const ALLEVENTS = 'all';
 const ONEEVENT = 'one';
-// Only used if the API call is one event.
-var APIEvent;
+
+var allevents = [];
+var nextGithubRequestAt;
+var etag;
+
+const eventsURL = 'https://api.github.com/events?per_page=100';
+//const eventsURL = 'https://api.github.com/users/rdroog/events/public?per_page=100';
+const timeout = 5000;
 
 http.createServer((req, res) => {
     console.log('request received from client');
     res.writeHead(200, { 'Content-Type': 'text/plain' });
     
-    regexpstr = getAPICall(req.url);
-    regexp = getRegexp(regexpstr);
+    APIInfo = getAPIInfo(req.url);
+    console.log('APIInfo received');
     
-    makeGithubConnection(regexp, res);
-    //res.end(results);
+    filterEvents(APIInfo, res);
 }).listen(port, hostname, () => {
     console.log(`Server running at http://${hostname}:${port}/`);
+    
+    nextGithubRequestAt = Date.now();
+    
+    startGithubConnection();    
 });
 
-function getAPICall(url) {
+function getAPIInfo(url) {
     const path = url.substr(1);
     const indexPartEnd = path.indexOf('/');
     const part = path.substr(0, indexPartEnd);
+    var regexpstr;
+    
+    
+    var custom;
+    var standard;
+    var APICall;
+    var APIEvent = "";
     var regexpstr;
     
     if(part === 'custom' || part === 'payload') {
@@ -72,7 +92,15 @@ function getAPICall(url) {
         //TODO: error
     }
     
-    return regexpstr;
+    var regexp = getRegexp(regexpstr)
+    
+    return {
+        custom: custom,
+        standard: standard,
+        APICall: APICall,
+        APIEvent: APIEvent,
+        regexp: regexp
+    };
 }
 
 function getRegexp(regexpstr) {
@@ -83,70 +111,123 @@ function getRegexp(regexpstr) {
     return regexp;
 }
 
-function makeGithubConnection(regexp, res) {
+function startGithubConnection() {
     console.log('trying to make connection to github...');
-    const options = {
-        url: 'https://api.github.com/users/rdroog/events/public',
-        //url: 'https://api.github.com/events',
-        timeout: 5000,
-        headers: {
-            'User-Agent': 'github-events-grep'
-        }
-    };
     
-    var data = [];
+    options = getOptions();
     
-    request.
-        get(options).
-        on('error', function(err) {
-            if(err.code === 'ETIMEDOUT') {
-                console.log('timeout at github');
-            } else {
-                console.log('error occurred at github: ' + err);
-            }
-        }).
-        on('response', function(response) {
-            if(response.statusCode === 200) {
-                console.log('github status code correct (' + response.statusCode + ')');
-            } else {
-                console.log('incorrect github status code: ' + response.statusCode);
-            }
-        }).
-        on('data', function(chunk) {
-            console.log('received data');
-            data += chunk;
-        }).
-        on('end', function() {
-            filterEvents(data, regexp, res);
-            console.log('-----end of data-----');
-        });
-    console.log('request sent to Github');
+    nextGithubRequest(options);
 }
 
-function filterEvents(data, regexp, res) {
-    var events = JSON.parse(data);
+function getOptions() {
+    var options;
     
-    if(APICall === ONEEVENT) {
+    if(etag) {
+        options = {
+            url: eventsURL,
+            timeout: timeout,
+            headers: {
+                'User-Agent': 'github-events-grep',
+                'ETag': etag
+            }
+        };
+    } else {
+        options = {
+            url: eventsURL,
+            timeout: timeout,
+            headers: {
+                'User-Agent': 'github-events-grep'
+            }
+        };
+    }
+    
+    return options;
+}
+
+function nextGithubRequest(options) {
+    var data = [];
+    
+    run(function* (gen) {
+        const sleepFor = Math.max(0, nextGithubRequestAt - Date.now());
+        
+        yield setTimeout(gen(), sleepFor);
+        
+        request.
+            get(options).
+            on('error', function(err) {
+                if(err.code === 'ETIMEDOUT') {
+                    console.log('timeout at github');
+                } else {
+                    console.log('error occurred at github: ' + err);
+                }
+            }).
+            on('response', function(response) {
+                if(response.statusCode === 200) {
+                    console.log('github status code correct (' + response.statusCode + ')');
+                } else {
+                    console.log('incorrect github status code: ' + response.statusCode);
+                }
+                
+                getNextGithubRequestAt(response.headers);
+                etag = response.headers['etag'];
+            }).
+            on('data', function(chunk) {
+                //console.log('received data');
+                data += chunk;
+            }).
+            on('end', function() {
+                var newevents = JSON.parse(data);
+                allevents = allevents.concat(newevents);
+                console.log('-----end of data-----');
+                
+                options = getOptions();
+                //nextGithubRequest(options);
+            });
+        console.log('request sent to Github');
+    });
+}
+
+function getNextGithubRequestAt(headers) {
+    const pollinterval = headers['x-poll-interval']; // in seconds
+            
+    const rateRemaining = headers['x-ratelimit-remaining']; // until rateReset
+    const rateReset = new Date(headers['x-ratelimit-reset'] * 1000); // in ms
+    const now = Date.now();
+    
+    const ratePerMs = Math.max(pollinterval/1000, (rateReset - now) / rateRemaining);
+    
+    nextGithubRequestAt = now + ratePerMs;
+    
+    //console.log('next github request at: ' + nextGithubRequestAt.toUTCString()  + ' (UTC)');
+}
+
+function filterEvents(APIInfo, res) {
+    //hard copy for filtering
+    var events = JSON.parse(JSON.stringify(allevents));
+    
+    if(APIInfo.APICall === ONEEVENT) {
         console.log('going');
         events = events.
             filter(function(event) {
-                return event.type === APIEvent;
+                return event.type === APIInfo.APIEvent;
             });
     }
     
-    filterOnRegexp(events, regexp, res);
+    filterOnRegexp(events, APIInfo, res);
 }
 
-function filterOnRegexp(events, regexp, res) {
+function filterOnRegexp(events, APIInfo, res) {
     console.log('filteronregexp');
     var results = [];
+    
+    regexp = APIInfo.regexp;
     
     events.
         forEach(function(event) {
             var matched = false;
             
             // API call is for custom (payload) part
-            if(custom) {
+            if(APIInfo.custom) {
                 //Deprecated events not shown below, non-visible events are, but not used.
                 if(event.type === 'CommitCommentEvent' || event.type === 'IssueCommentEvent' || event.type === 'PullRequestReviewCommentEvent') {
                     result = regexp.test(event.payload.comment.body);
@@ -224,7 +305,8 @@ function filterOnRegexp(events, regexp, res) {
             }
             
             // API call is for standard part
-            if(standard) {
+            if(APIInfo.standard) {
+                //hard copy
                 const eventWithoutPayload = JSON.parse(JSON.stringify(event));
                 delete eventWithoutPayload.payload;
                 result = regexp.test(eventWithoutPayload);
