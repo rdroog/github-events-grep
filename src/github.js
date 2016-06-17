@@ -32,7 +32,7 @@ http.createServer((req, res) => {
     res.writeHead(200, { 'Content-Type': 'text/plain'});
     
     if(req.url === '/ui') {
-        logger(0, req.url);
+        // For request via the UI
         fs.readFile('github.html', "binary", function(err, file) {
             if(err) {
                 response.writeHead(500, {"Content-Type": "text/plain"});
@@ -44,12 +44,12 @@ http.createServer((req, res) => {
             res.write(file, "binary");
         });
     } else {
-        logger(0, req.url);
+        // For request via the API
         APIInfo = getAPIInfo(req.url);
         logger(9, 'APIInfo received');
         
         if(APIInfo.error) {
-            res.end(APIInfo);
+            res.end(JSON.stringify(APIInfo));
         } else {
             filterEvents(APIInfo, res);
         }
@@ -169,7 +169,10 @@ function filterOnRegexp(events, APIInfo, res) {
         forEach(function(event) {
             var matched = false;
             
-            if(event.payload || event.payload == '{}') {
+            if(!event.payload || JSON.stringify(event.payload) == '{}'){
+                logger(0, 'Event had no payload'); 
+                logger(0, event);
+            } else {
                 // API call is for custom (payload) part
                 if(APIInfo.custom) {
                     logger(9, 'Searching through custom...'); 
@@ -217,10 +220,8 @@ function filterOnRegexp(events, APIInfo, res) {
                         //Events of this type are not visible in timelines.
                         logger(0, 'This event should not be visible in timelines');
                     } else if(event.type === 'PublicEvent') {
-                        // result = regexp.test(event.payload.repository.full_name);  // resulted in an error
-                        // matched = matched || result;
-                        logger(0, 'Unsupported (for now)');
-                        logger(0, event);
+                        result = regexp.test(event.payload.repository.full_name);
+                        matched = matched || result;
                     } else if(event.type === 'PullRequestEvent') {
                         result = regexp.test(event.payload.action)
                               || regexp.test(event.payload.pull_request.state) 
@@ -266,9 +267,6 @@ function filterOnRegexp(events, APIInfo, res) {
                     result = regexp.test(JSON.stringify(eventWithoutPayload));
                     matched = matched || result;
                 }
-            } else {
-                logger(0, 'Event had no payload'); 
-                logger(0, event);
             }
              
             // If this event is matched, add it to results
@@ -378,7 +376,15 @@ function getNextGithubRequestAt(headers) {
     const rateReset = new Date(headers['x-ratelimit-reset'] * 1000); // in ms
     const now = Date.now();
     
-    const nextRequestIn = Math.max(pollinterval/1000, (rateReset - now) / rateRemaining);
+    const calculation = (rateReset - now) / rateRemaining;
+    
+    var nextRequestIn;
+    
+    if(calculation == 'NaN') {
+        nextRequestIn = pollinterval/1000;
+    } else {
+        nextRequestIn = Math.max(pollinterval/1000, calculation);
+    }
     
     nextGithubRequestAt = now + nextRequestIn;
     

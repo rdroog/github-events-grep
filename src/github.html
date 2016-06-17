@@ -33,7 +33,7 @@
         } else {
             url = "/" + part + "/" + call + "/" + regexp;
         }
-        url = "http://127.0.0.1:1337" + url;
+        
         request.onreadystatechange = function() {
             if (request.readyState === 4) {
                 if (request.status === 200) {
