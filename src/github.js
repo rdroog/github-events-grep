@@ -34,7 +34,11 @@ http.createServer((req, res) => {
     APIInfo = getAPIInfo(req.url);
     logger(9, 'APIInfo received');
     
-    filterEvents(APIInfo, res);
+    if(APIInfo.error) {
+        res.end(error);
+    } else {
+        filterEvents(APIInfo, res);
+    }
 }).listen(port, hostname, () => {
     logger(0, `Server running at http://${hostname}:${port}/`);
     
@@ -55,8 +59,8 @@ function getAPIInfo(url) {
     const part = path.substr(0, indexPartEnd);
     var regexpstr;
     
-    var custom;
-    var standard;
+    var custom = false;
+    var standard = false;
     var APICall;
     var APIEvent = "";
     var regexpstr;
@@ -66,9 +70,12 @@ function getAPIInfo(url) {
         custom = true;
     } else if(part === 'standard') {
         standard = true;
-    } else {
+    } else if(part === 'both') {
         custom = true;
         standard = true;
+    } else {
+        logger(0, 'Error in part: ' + part);
+        return {error: "The API-part went wrong, because it was not 'custom', 'payload' (these two are the same), 'standard' or 'both'. It should be: /[part]/all/[regexp] or /[part]/one/[eventType]/[regexp]."};
     }
     
     const indexCallEnd = path.indexOf('/', indexPartEnd+1);
@@ -85,8 +92,8 @@ function getAPIInfo(url) {
         
         regexpstr = path.substr(indexEventEnd+1);
     } else {
-        logger(0, 'Uncaught error in getAPIInfo()');
-        //TODO: error
+        logger(0, 'Error in event call: ' + call);
+        return {error: "The API-call went wrong, because there was no 'all' or 'one'. It should be: /[part]/all/[regexp] or /[part]/one/[eventType]/[regexp]."};
     }
     
     logger(8, 'APIInfo APICall = ' + APICall);
@@ -147,98 +154,104 @@ function filterOnRegexp(events, APIInfo, res) {
         forEach(function(event) {
             var matched = false;
             
-            // API call is for custom (payload) part
-            if(APIInfo.custom) {
-                //Deprecated events not shown below, non-visible events are, but not used.
-                if(event.type === 'CommitCommentEvent' || event.type === 'IssueCommentEvent' || event.type === 'PullRequestReviewCommentEvent') {
-                    result = regexp.test(event.payload.comment.body);
-                    matched = matched || result;
-                } else if(event.type === 'CreateEvent') {
-                    result = regexp.test(event.payload.description);
-                    matched = matched || result;
-                } else if(event.type === 'DeleteEvent') {
-                    result = regexp.test(event.payload.ref) 
-                          || regexp.test(event.payload.reftype);
-                    matched = matched || result;
-                } else if(event.type === 'DeploymentEvent') {
-                    //Events of this type are not visible in timelines.
-                    logger(0, 'This event should not be visible in timelines');
-                } else if(event.type === 'DeploymentStatusEvent') {
-                    //Events of this type are not visible in timelines.
-                    logger(0, 'This event should not be visible in timelines');
-                } else if(event.type === 'ForkEvent') {
-                    result = regexp.test(event.payload.forkee.full_name);
-                    matched = matched || result;
-                } else if(event.type === 'GollumEvent') {
-                    event.payload.pages.
-                        forEach(function(page) {
-                            result = regexp.test(page.page_name) 
-                                  || regexp.test(page.title) 
-                                  || regexp.test(page.summary);
-                            matched = matched || result;
-                        });
-                } else if(event.type === 'IssuesEvent') {
-                    result = regexp.test(event.payload.action) 
-                          || regexp.test(event.payload.issue.title) 
-                          || regexp.test(event.payload.issue.body);
-                    matched = matched || result;
-                } else if(event.type === 'MemberEvent') {
-                    result = regexp.test(event.payload.action) 
-                          || regexp.test(event.payload.member.login);
-                    matched = matched || result;
-                } else if(event.type === 'MembershipEvent') {
-                    //Events of this type are not visible in timelines.
-                    logger(0, 'This event should not be visible in timelines');
-                } else if(event.type === 'PageBuildEvent') {
-                    //Events of this type are not visible in timelines.
-                    logger(0, 'This event should not be visible in timelines');
-                } else if(event.type === 'PublicEvent') {
-                    // result = regexp.test(event.payload.repository.full_name);  // resulted in an error
-                    // matched = matched || result;
-                    logger(0, 'Unsupported (for now)');
-                } else if(event.type === 'PullRequestEvent') {
-                    result = regexp.test(event.payload.action)
-                          || regexp.test(event.payload.pull_request.state) 
-                          || regexp.test(event.payload.pull_request.title) 
-                          || regexp.test(event.payload.pull_request.body);
-                    matched = matched || result;
-                } else if(event.type === 'PushEvent') {
-                    event.payload.commits.
-                        forEach(function(commit) {
-                            result = regexp.test(commit.message);
-                            matched = matched || result;
-                        });
-                } else if(event.type === 'ReleaseEvent') {
-                    result = regexp.test(event.payload.action)
-                          || regexp.test(event.payload.release.name)
-                          || regexp.test(event.payload.release.body);
-                    matched = matched || result;
-                } else if(event.type === 'RepositoryEvent') {
-                    result = regexp.test(event.payload.action)
-                          || regexp.test(event.payload.repository.full_name)
-                          || regexp.test(event.payload.repository.description);
-                    matched = matched || result;
-                } else if(event.type === 'StatusEvent') {
-                    //Events of this type are not visible in timelines.
-                    logger(0, 'This event should not be visible in timelines');
-                } else if(event.type === 'TeamAddEvent') {
-                    //Events of this type are not visible in timelines.
-                    logger(0, 'This event should not be visible in timelines');
-                } else if(event.type === 'WatchEvent') {
-                    result = regexp.test(event.payload.action);
-                    matched = matched || result;
-                } else {
-                    logger(0, 'Event type not used: ' + event.type);
+            if(event.payload) {
+                // API call is for custom (payload) part
+                if(APIInfo.custom) {
+                    //Deprecated events not shown below, non-visible events are, but not used.
+                    if(event.type === 'CommitCommentEvent' || event.type === 'IssueCommentEvent' || event.type === 'PullRequestReviewCommentEvent') {
+                        result = regexp.test(event.payload.comment.body);
+                        matched = matched || result;
+                    } else if(event.type === 'CreateEvent') {
+                        result = regexp.test(event.payload.description);
+                        matched = matched || result;
+                    } else if(event.type === 'DeleteEvent') {
+                        result = regexp.test(event.payload.ref) 
+                              || regexp.test(event.payload.reftype);
+                        matched = matched || result;
+                    } else if(event.type === 'DeploymentEvent') {
+                        //Events of this type are not visible in timelines.
+                        logger(0, 'This event should not be visible in timelines');
+                    } else if(event.type === 'DeploymentStatusEvent') {
+                        //Events of this type are not visible in timelines.
+                        logger(0, 'This event should not be visible in timelines');
+                    } else if(event.type === 'ForkEvent') {
+                        result = regexp.test(event.payload.forkee.full_name);
+                        matched = matched || result;
+                    } else if(event.type === 'GollumEvent') {
+                        event.payload.pages.
+                            forEach(function(page) {
+                                result = regexp.test(page.page_name) 
+                                      || regexp.test(page.title) 
+                                      || regexp.test(page.summary);
+                                matched = matched || result;
+                            });
+                    } else if(event.type === 'IssuesEvent') {
+                        result = regexp.test(event.payload.action) 
+                              || regexp.test(event.payload.issue.title) 
+                              || regexp.test(event.payload.issue.body);
+                        matched = matched || result;
+                    } else if(event.type === 'MemberEvent') {
+                        result = regexp.test(event.payload.action) 
+                              || regexp.test(event.payload.member.login);
+                        matched = matched || result;
+                    } else if(event.type === 'MembershipEvent') {
+                        //Events of this type are not visible in timelines.
+                        logger(0, 'This event should not be visible in timelines');
+                    } else if(event.type === 'PageBuildEvent') {
+                        //Events of this type are not visible in timelines.
+                        logger(0, 'This event should not be visible in timelines');
+                    } else if(event.type === 'PublicEvent') {
+                        // result = regexp.test(event.payload.repository.full_name);  // resulted in an error
+                        // matched = matched || result;
+                        logger(0, 'Unsupported (for now)');
+                        logger(0, event);
+                    } else if(event.type === 'PullRequestEvent') {
+                        result = regexp.test(event.payload.action)
+                              || regexp.test(event.payload.pull_request.state) 
+                              || regexp.test(event.payload.pull_request.title) 
+                              || regexp.test(event.payload.pull_request.body);
+                        matched = matched || result;
+                    } else if(event.type === 'PushEvent') {
+                        event.payload.commits.
+                            forEach(function(commit) {
+                                result = regexp.test(commit.message);
+                                matched = matched || result;
+                            });
+                    } else if(event.type === 'ReleaseEvent') {
+                        result = regexp.test(event.payload.action)
+                              || regexp.test(event.payload.release.name)
+                              || regexp.test(event.payload.release.body);
+                        matched = matched || result;
+                    } else if(event.type === 'RepositoryEvent') {
+                        result = regexp.test(event.payload.action)
+                              || regexp.test(event.payload.repository.full_name)
+                              || regexp.test(event.payload.repository.description);
+                        matched = matched || result;
+                    } else if(event.type === 'StatusEvent') {
+                        //Events of this type are not visible in timelines.
+                        logger(0, 'This event should not be visible in timelines');
+                    } else if(event.type === 'TeamAddEvent') {
+                        //Events of this type are not visible in timelines.
+                        logger(0, 'This event should not be visible in timelines');
+                    } else if(event.type === 'WatchEvent') {
+                        result = regexp.test(event.payload.action);
+                        matched = matched || result;
+                    } else {
+                        logger(0, 'Event type not used: ' + event.type);
+                    }
                 }
-            }
-            
-            // API call is for standard part
-            if(APIInfo.standard) {
-                //hard copy
-                const eventWithoutPayload = JSON.parse(JSON.stringify(event));
-                delete eventWithoutPayload.payload;
-                result = regexp.test(eventWithoutPayload);
-                matched = matched || result;
+                
+                // API call is for standard part
+                if(APIInfo.standard) {
+                    //hard copy
+                    const eventWithoutPayload = JSON.parse(JSON.stringify(event));
+                    delete eventWithoutPayload.payload;
+                    result = regexp.test(eventWithoutPayload);
+                    matched = matched || result;
+                }
+            } else {
+                logger(0, 'Event had no payload'); 
+                logger(0, event);
             }
              
             // If this event is matched, add it to results
@@ -348,11 +361,17 @@ function getNextGithubRequestAt(headers) {
     const rateReset = new Date(headers['x-ratelimit-reset'] * 1000); // in ms
     const now = Date.now();
     
-    const ratePerMs = Math.max(pollinterval/1000, (rateReset - now) / rateRemaining);
+    const nextRequestIn = Math.max(pollinterval/1000, (rateReset - now) / rateRemaining);
     
-    nextGithubRequestAt = now + ratePerMs;
+    nextGithubRequestAt = now + nextRequestIn;
     
     const nextDate = new Date(nextGithubRequestAt);
+    
+    logger(8, 'x-poll-interval: ' + pollinterval);
+    logger(8, 'x-ratelimit-limit: ' + headers['x-ratelimit-limit']);
+    logger(8, 'x-ratelimit-remaining: ' + rateRemaining);
+    logger(8, 'x-ratelimit-reset: ' + rateReset.toUTCString()  + ' (UTC)');
+    logger(8, 'calculated next request in: ' + nextRequestIn  + ' ms');
     
     logger(4, 'next github request at: ' + nextDate.toUTCString()  + ' (UTC)');
 }
