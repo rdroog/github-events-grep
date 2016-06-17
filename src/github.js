@@ -35,7 +35,7 @@ http.createServer((req, res) => {
     logger(9, 'APIInfo received');
     
     if(APIInfo.error) {
-        res.end(APIInfo.error);
+        res.end(APIInfo);
     } else {
         filterEvents(APIInfo, res);
     }
