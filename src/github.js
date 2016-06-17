@@ -87,7 +87,7 @@ function getAPIInfo(url) {
         regexpstr = path.substr(indexCallEnd+1);
     } else if (call === ONEEVENT) {
         APICall = ONEEVENT;
-        const indexEventEnd = path.indexOf('/', indexEventEnd+1);
+        const indexEventEnd = path.indexOf('/', indexCallEnd+1);
         APIEvent = path.substr(indexCallEnd+1, indexEventEnd-indexCallEnd-1);
         
         regexpstr = path.substr(indexEventEnd+1);
@@ -157,6 +157,7 @@ function filterOnRegexp(events, APIInfo, res) {
             if(event.payload) {
                 // API call is for custom (payload) part
                 if(APIInfo.custom) {
+                    logger(8, 'Searching through custom...'); 
                     //Deprecated events not shown below, non-visible events are, but not used.
                     if(event.type === 'CommitCommentEvent' || event.type === 'IssueCommentEvent' || event.type === 'PullRequestReviewCommentEvent') {
                         result = regexp.test(event.payload.comment.body);
@@ -244,9 +245,11 @@ function filterOnRegexp(events, APIInfo, res) {
                 // API call is for standard part
                 if(APIInfo.standard) {
                     //hard copy
+                    logger(8, 'Searching through standard...'); 
                     const eventWithoutPayload = JSON.parse(JSON.stringify(event));
                     delete eventWithoutPayload.payload;
-                    result = regexp.test(eventWithoutPayload);
+                    console.log(eventWithoutPayload);
+                    result = regexp.test(JSON.stringify(eventWithoutPayload));
                     matched = matched || result;
                 }
             } else {
