@@ -1,3 +1,6 @@
+/***** SETUP *****/
+
+// Necessary packages
 const http = require('http');
 const fs = require('fs');
 const Rx = require('rx');
@@ -6,31 +9,24 @@ const RxNode = require('rx-node');
 const request = require('request');
 const run = require('gen-run');
 
+// Setup variables
 const hostname = '127.0.0.1';
 const port = 1337;
-
 const loggingLevel = 9; // 0 = nothing, 4 = some, 9 = all
-
-/* Deprecated because otherwise it cannot handle more than 1 request concurrently. */
-/* Parts on which the call should be executed*/
-//var custom = false;
-//var standard = false;
-// Only used if the API call is one event.
-//var APIEvent;
-
-/* Type of API call */
-//var APICall;
-const ALLEVENTS = 'all';
-const ONEEVENT = 'one';
-
-var allevents = [];
-var nextGithubRequestAt;
-var etag;
-
 const eventsURL = 'https://api.github.com/events?per_page=100';
 //const eventsURL = 'https://api.github.com/users/rdroog/events/public?per_page=100';
 const timeout = 5000;
 
+//Type of API call
+const ALLEVENTS = 'all';
+const ONEEVENT = 'one';
+
+// Variables kept up to date by server
+var allevents = [];
+var nextGithubRequestAt;
+var etag;
+
+// Creates the basic server, above per request, below per server
 http.createServer((req, res) => {
     logger(0, 'request received from client');
     res.writeHead(200, { 'Content-Type': 'text/plain' });
@@ -47,14 +43,17 @@ http.createServer((req, res) => {
     startGithubConnection();    
 });
 
-/* FUNCTIONS EXECUTED PER REQUEST */
+/***** FUNCTIONS EXECUTED PER REQUEST *****/
 
+// Gets all the info from the API call:
+// - If either in the custom part, the payload part of both should be search
+// - If one or all events should be search
+// Links to getRegexp() for the regular expression
 function getAPIInfo(url) {
     const path = url.substr(1);
     const indexPartEnd = path.indexOf('/');
     const part = path.substr(0, indexPartEnd);
     var regexpstr;
-    
     
     var custom;
     var standard;
@@ -62,6 +61,7 @@ function getAPIInfo(url) {
     var APIEvent = "";
     var regexpstr;
     
+    // Gets the to be search path
     if(part === 'custom' || part === 'payload') {
         custom = true;
     } else if(part === 'standard') {
@@ -71,30 +71,28 @@ function getAPIInfo(url) {
         standard = true;
     }
     
-    logger(9, 'part = ' + part);
-    
     const indexCallEnd = path.indexOf('/', indexPartEnd+1);
     const call = path.substr(indexPartEnd+1, indexCallEnd-indexPartEnd-1);
     
+    // Gets if all or one event should be search, and if one, which one.
     if(call === ALLEVENTS) {
         APICall = ALLEVENTS;
-        logger(9, 'apicall = ' + APICall);
         regexpstr = path.substr(indexCallEnd+1);
     } else if (call === ONEEVENT) {
         APICall = ONEEVENT;
         const indexEventEnd = path.indexOf('/', index+1);
         APIEvent = path.substr(indexCallEnd+1, indexEventEnd-indexCallEnd-1);
         
-        logger(9, 'path = ' + path);
-        logger(9, 'index = ' + index);
-        logger(9, 'index2 = ' + index2);
-        logger(9, 'apicall = ' + APICall);
-        logger(9, 'apievent = ' + APIEvent);
-        
         regexpstr = path.substr(indexEventEnd+1);
     } else {
+        logger(0, 'Uncaught error in getAPIInfo()');
         //TODO: error
     }
+    
+    logger(9, 'APIInfo APICall = ' + APICall);
+    logger(9, 'APIInfo APIEvent = ' + APIEvent);
+    logger(9, 'APIInfo custom: ' + custom);
+    logger(9, 'APIInfo standard: ' + standard);
     
     var regexp = getRegexp(regexpstr)
     
@@ -107,6 +105,7 @@ function getAPIInfo(url) {
     };
 }
 
+// Gets the regular expression, sets it as insensitive for case
 function getRegexp(regexpstr) {
     var regexp = new RegExp(regexpstr, 'i');
     
@@ -115,8 +114,11 @@ function getRegexp(regexpstr) {
     return regexp;
 }
 
+// Filters the event stream so that 
+// 1) a hard copy is available for filtering etc. and 
+// 2) only events of the correct type are there
 function filterEvents(APIInfo, res) {
-    //hard copy for filtering
+    // hard copy for filtering
     var events = JSON.parse(JSON.stringify(allevents));
     
     if(APIInfo.APICall === ONEEVENT) {
@@ -130,9 +132,11 @@ function filterEvents(APIInfo, res) {
     filterOnRegexp(events, APIInfo, res);
 }
 
+// Filters the events based on the regular expression
 function filterOnRegexp(events, APIInfo, res) {
     logger(9, 'filteronregexp');
     var results = [];
+    var matches = 0;
     
     regexp = APIInfo.regexp;
     
@@ -155,8 +159,10 @@ function filterOnRegexp(events, APIInfo, res) {
                     matched = matched || result;
                 } else if(event.type === 'DeploymentEvent') {
                     //Events of this type are not visible in timelines.
+                    logger(0, 'This event should not be visible in timelines');
                 } else if(event.type === 'DeploymentStatusEvent') {
                     //Events of this type are not visible in timelines.
+                    logger(0, 'This event should not be visible in timelines');
                 } else if(event.type === 'ForkEvent') {
                     result = regexp.test(event.payload.forkee.full_name);
                     matched = matched || result;
@@ -179,8 +185,10 @@ function filterOnRegexp(events, APIInfo, res) {
                     matched = matched || result;
                 } else if(event.type === 'MembershipEvent') {
                     //Events of this type are not visible in timelines.
+                    logger(0, 'This event should not be visible in timelines');
                 } else if(event.type === 'PageBuildEvent') {
                     //Events of this type are not visible in timelines.
+                    logger(0, 'This event should not be visible in timelines');
                 } else if(event.type === 'PublicEvent') {
                     result = regexp.test(event.payload.repository.full_name);
                     matched = matched || result;
@@ -208,8 +216,10 @@ function filterOnRegexp(events, APIInfo, res) {
                     matched = matched || result;
                 } else if(event.type === 'StatusEvent') {
                     //Events of this type are not visible in timelines.
+                    logger(0, 'This event should not be visible in timelines');
                 } else if(event.type === 'TeamAddEvent') {
                     //Events of this type are not visible in timelines.
+                    logger(0, 'This event should not be visible in timelines');
                 } else if(event.type === 'WatchEvent') {
                     result = regexp.test(event.payload.action);
                     matched = matched || result;
@@ -230,16 +240,19 @@ function filterOnRegexp(events, APIInfo, res) {
             // If this event is matched, add it to results
             if(matched) {
                 logger(9, 'match');
+                matches++;
                 results.push(event);
             } else {
                 logger(9, 'no match');
             }
         });
     
+    console.log(4, 'Amount of matches: ' + matches);
+    
     res.end(JSON.stringify(results, null, '  '));
 }
 
-/* FUNCTIONS EXECUTED PER SERVER */
+/***** FUNCTIONS EXECUTED PER SERVER *****/
 
 // Starts the connection to Github.
 function startGithubConnection() {
@@ -281,8 +294,8 @@ function nextGithubRequest(options) {
     var data = [];
     
     run(function* (gen) {
+        // Sleep until next allowed request at github
         const sleepFor = Math.max(0, nextGithubRequestAt - Date.now());
-        
         yield setTimeout(gen(), sleepFor);
         
         request.
@@ -314,7 +327,7 @@ function nextGithubRequest(options) {
                 logger(9, '-----end of data-----');
                 
                 options = getOptions();
-                //nextGithubRequest(options);
+                nextGithubRequest(options);
             });
         logger(4, 'request sent to Github');
     });
@@ -338,7 +351,9 @@ function getNextGithubRequestAt(headers) {
     logger(9, 'next github request at: ' + nextDate.toUTCString()  + ' (UTC)');
 }
 
+/***** UTILITY FUNCTIONS *****/
 
+// Simple logger function based on the selected level.
 function logger(level, str) {
     if(loggingLevel >= level) {
         console.log(str);
