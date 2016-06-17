@@ -12,7 +12,7 @@ const run = require('gen-run');
 // Setup variables
 const hostname = '127.0.0.1';
 const port = 1337;
-const loggingLevel = 9; // 0 = nothing, 4 = some, 9 = all
+const loggingLevel = 8; // 0 = nothing, 4 = some, 9 = all
 const eventsURL = 'https://api.github.com/events?per_page=100';
 //const eventsURL = 'https://api.github.com/users/rdroog/events/public?per_page=100';
 const timeout = 5000;
@@ -190,8 +190,9 @@ function filterOnRegexp(events, APIInfo, res) {
                     //Events of this type are not visible in timelines.
                     logger(0, 'This event should not be visible in timelines');
                 } else if(event.type === 'PublicEvent') {
-                    result = regexp.test(event.payload.repository.full_name);
-                    matched = matched || result;
+                    // result = regexp.test(event.payload.repository.full_name);  // resulted in an error
+                    // matched = matched || result;
+                    logger(0, 'Unsupported (for now)');
                 } else if(event.type === 'PullRequestEvent') {
                     result = regexp.test(event.payload.action)
                           || regexp.test(event.payload.pull_request.state) 
