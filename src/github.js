@@ -381,7 +381,7 @@ function getNextGithubRequestAt(headers) {
     const calculation = (rateReset - now) / rateRemaining;
     
     var nextRequestIn;
-    calculation = 1 / 0;
+    
     if(!pollinterval) {
         nextRequestIn = 1000;
     } else if(calculation == 'NaN') {
