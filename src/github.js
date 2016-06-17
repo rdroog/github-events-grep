@@ -157,7 +157,7 @@ function filterOnRegexp(events, APIInfo, res) {
             if(event.payload) {
                 // API call is for custom (payload) part
                 if(APIInfo.custom) {
-                    logger(8, 'Searching through custom...'); 
+                    logger(9, 'Searching through custom...'); 
                     //Deprecated events not shown below, non-visible events are, but not used.
                     if(event.type === 'CommitCommentEvent' || event.type === 'IssueCommentEvent' || event.type === 'PullRequestReviewCommentEvent') {
                         result = regexp.test(event.payload.comment.body);
@@ -245,10 +245,9 @@ function filterOnRegexp(events, APIInfo, res) {
                 // API call is for standard part
                 if(APIInfo.standard) {
                     //hard copy
-                    logger(8, 'Searching through standard...'); 
+                    logger(9, 'Searching through standard...'); 
                     const eventWithoutPayload = JSON.parse(JSON.stringify(event));
                     delete eventWithoutPayload.payload;
-                    console.log(eventWithoutPayload);
                     result = regexp.test(JSON.stringify(eventWithoutPayload));
                     matched = matched || result;
                 }
