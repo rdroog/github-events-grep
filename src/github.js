@@ -250,7 +250,7 @@ function filterOnRegexp(events, APIInfo, res) {
             }
         });
     
-    console.log(4, 'Amount of matches: ' + matches);
+    logger(4, 'Amount of matches: ' + matches);
     
     res.end(JSON.stringify(results, null, '  '));
 }
