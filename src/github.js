@@ -139,6 +139,7 @@ function filterOnRegexp(events, APIInfo, res) {
     logger(9, 'filteronregexp');
     var results = [];
     var matches = 0;
+    var nonmatches = 0;
     
     regexp = APIInfo.regexp;
     
@@ -247,10 +248,12 @@ function filterOnRegexp(events, APIInfo, res) {
                 results.push(event);
             } else {
                 logger(9, 'no match');
+                nonmatches++;
             }
         });
     
     logger(4, 'Amount of matches: ' + matches);
+    logger(4, 'Amount of nonmatches: ' + nonmatches);
     
     res.end(JSON.stringify(results, null, '  '));
 }
