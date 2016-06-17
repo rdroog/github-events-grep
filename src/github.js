@@ -29,7 +29,7 @@ var etag;
 // Creates the basic server, above per request, below per server
 http.createServer((req, res) => {
     logger(0, 'Request received from client');
-    res.writeHead(200, { 'Content-Type': 'text/plain');
+    res.writeHead(200, { 'Content-Type': 'text/plain'});
     
     if(req.url === '/ui') {
         logger(0, req.url);
