@@ -28,7 +28,7 @@ var etag;
 
 // Creates the basic server, above per request, below per server
 http.createServer((req, res) => {
-    logger(0, 'request received from client');
+    logger(0, 'Request received from client');
     res.writeHead(200, { 'Content-Type': 'text/plain' });
     
     APIInfo = getAPIInfo(req.url);
@@ -89,10 +89,10 @@ function getAPIInfo(url) {
         //TODO: error
     }
     
-    logger(9, 'APIInfo APICall = ' + APICall);
-    logger(9, 'APIInfo APIEvent = ' + APIEvent);
-    logger(9, 'APIInfo custom: ' + custom);
-    logger(9, 'APIInfo standard: ' + standard);
+    logger(8, 'APIInfo APICall = ' + APICall);
+    logger(8, 'APIInfo APIEvent = ' + APIEvent);
+    logger(8, 'APIInfo custom: ' + custom);
+    logger(8, 'APIInfo standard: ' + standard);
     
     var regexp = getRegexp(regexpstr)
     
@@ -109,7 +109,7 @@ function getAPIInfo(url) {
 function getRegexp(regexpstr) {
     var regexp = new RegExp(regexpstr, 'i');
     
-    logger(9, 'regexp = ' + regexpstr);
+    logger(8, 'APIinforegexp = ' + regexpstr);
     
     return regexp;
 }
@@ -122,11 +122,13 @@ function filterEvents(APIInfo, res) {
     var events = JSON.parse(JSON.stringify(allevents));
     
     if(APIInfo.APICall === ONEEVENT) {
-        logger(9, 'going');
+        logger(8, 'Filtering on one event');
         events = events.
             filter(function(event) {
                 return event.type === APIInfo.APIEvent;
             });
+    } else {
+        logger(8, 'Searching through all events');
     }
     
     filterOnRegexp(events, APIInfo, res);
@@ -257,7 +259,7 @@ function filterOnRegexp(events, APIInfo, res) {
 
 // Starts the connection to Github.
 function startGithubConnection() {
-    logger(9, 'trying to make connection to github...');
+    logger(8, 'trying to make connection to github...');
     
     options = getOptions();
     
@@ -325,7 +327,7 @@ function nextGithubRequest(options) {
             on('end', function() {
                 var newevents = JSON.parse(data);
                 allevents = allevents.concat(newevents);
-                logger(9, '-----end of data-----');
+                logger(8, '-----end of data-----');
                 
                 options = getOptions();
                 nextGithubRequest(options);
@@ -349,7 +351,7 @@ function getNextGithubRequestAt(headers) {
     
     const nextDate = new Date(nextGithubRequestAt);
     
-    logger(9, 'next github request at: ' + nextDate.toUTCString()  + ' (UTC)');
+    logger(4, 'next github request at: ' + nextDate.toUTCString()  + ' (UTC)');
 }
 
 /***** UTILITY FUNCTIONS *****/
