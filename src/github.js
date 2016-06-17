@@ -35,7 +35,7 @@ http.createServer((req, res) => {
     logger(9, 'APIInfo received');
     
     if(APIInfo.error) {
-        res.end(error);
+        res.end(APIInfo.error);
     } else {
         filterEvents(APIInfo, res);
     }
@@ -87,7 +87,7 @@ function getAPIInfo(url) {
         regexpstr = path.substr(indexCallEnd+1);
     } else if (call === ONEEVENT) {
         APICall = ONEEVENT;
-        const indexEventEnd = path.indexOf('/', index+1);
+        const indexEventEnd = path.indexOf('/', indexEventEnd+1);
         APIEvent = path.substr(indexCallEnd+1, indexEventEnd-indexCallEnd-1);
         
         regexpstr = path.substr(indexEventEnd+1);
