@@ -69,14 +69,14 @@ http.createServer((req, res) => {
             res.writeHead(200, { 'Content-Type': 'text/plain'});
             var subscription = realtime(APIInfo, res);
             
-            run(function* (gen) {
-                var sleepFor = Math.max(minRealtime, Math.min(time, maxRealtime));
-                logger(4, 'Duration of realtime subscription: ' + sleepFor + 'ms');
-                yield setTimeout(gen(), sleepFor);
+            var sleepFor = Math.max(minRealtime, Math.min(time, maxRealtime));
+            logger(4, 'Duration of realtime subscription: ' + sleepFor + 'ms');
+            
+            setTimeout(function() {
                 logger(4, 'Realtime subscription time ended');
                 subscription.unsubscribe();
                 endSubscription(res);
-            });
+            }, sleepFor);
         }
     } else {
         // For request via the API
@@ -163,7 +163,7 @@ function printEvent(event, res, first) {
         res.write(',');
     }
     res.write(JSON.stringify(event, null, '  '));
-    logger(8, 'Printed event: ' + event);
+    logger(6, 'Printed event: ' + JSON.stringify(event));
 }
 
 /***** FUNCTIONS EXECUTED PER NON-REALTIME REQUEST *****/
@@ -329,7 +329,7 @@ function matchEvent(event, APIInfo) {
     var regexp = APIInfo.regexp;
             
     if(!event.payload || JSON.stringify(event.payload) == '{}'){
-        logger(2, 'Event had no payload: ' + event);
+        logger(2, 'Event had no payload: ' + JSON.stringify(event)));
     } else {
         // API call is for custom (payload) part
         if(APIInfo.custom) {
