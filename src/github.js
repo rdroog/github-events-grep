@@ -55,7 +55,7 @@ http.createServer((req, res) => {
         if(APIInfo.error) {
             res.end(JSON.stringify(APIInfo));
         } else {
-            filterEvents(APIInfo, res);
+            filterEventsHardCopy(APIInfo, res);
         }
     }
 }).listen(port, hostname, () => {
@@ -158,10 +158,16 @@ function getRegexp(regexpstr) {
 // Filters the event stream so that 
 // 1) a hard copy is available for filtering etc. and 
 // 2) only events of the correct type are there
-function filterEvents(APIInfo, res) {
-    // hard copy for filtering
+function filterEventsHardCopy(APIInfo, res) {
+    // hard copy for filtering (non real-time because of this).
     var events = JSON.parse(JSON.stringify(allevents));
     
+    filterEvents(APIInfo, res, events);
+}
+
+// Filters the event stream so that 
+// 2) only events of the correct type are there
+function filterEvents(APIInfo, res, events) {
     if(APIInfo.APICall === ONEEVENT) {
         logger(8, 'Filtering on one event');
         events = events.
