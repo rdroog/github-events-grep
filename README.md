@@ -4,25 +4,25 @@ A real-time regular expression matcher on the GitHub event stream, created for t
 ## API calls
 An API-call is: /[part]/[id]/[call]/[regexp]
 
-### part
+#### part
 The part is one of the following:
 * custom
 * payload
 * standard
 * both
 
-### id
+#### id
 The id is one of the following:
 * id
 * complete
 
-### call
+#### call
 The call is one of the following:
 * all
 * one/[eventType]
 
-#### eventType
+###### eventType
 The eventType should be a type of an Github event, like `PushEvent'.
 
-### regexp
+#### regexp
 Regexp denotes the regular expression. It is always case insensitive.
