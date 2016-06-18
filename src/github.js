@@ -12,7 +12,7 @@ const run = require('gen-run');
 // Setup variables
 const hostname = '127.0.0.1';
 const port = 1337;
-const loggingLevel = 4; // 0 = (almost) nothing, 2 = most important things, 4 = some, 6 = everything except loop-like-things, 8 = all
+const loggingLevel = 6; // 0 = (almost) nothing, 2 = most important things, 4 = some, 6 = everything except loop-like-things, 8 = all
 const eventsURL = 'https://api.github.com/events?per_page=100';
 //const eventsURL = 'https://api.github.com/users/rdroog/events/public?per_page=100';
 const timeout = 5000;
@@ -573,7 +573,7 @@ function dateToStr(date) {
     var seconds = leftpad2(date.getSeconds());
     var ymd = date.getFullYear() + '-' + month + '-' + day;
     var hms = hours + ':' + minutes + ':' + seconds;
-    var str = ymd + '  ' + hms + ' ' + date.getMilliseconds() + 'ms';
+    var str = ymd + '  ' + hms + ' ' + leftpadms(date.getMilliseconds()) + 'ms';
 
     return str;
 }
