@@ -31,3 +31,9 @@ The eventType should be a type of an GitGub event, like 'PushEvent'.
 
 #### [regexp]
 Regexp denotes the regular expression. It is always case insensitive.
+
+## Few example API calls:
+* /realtime/10000/both/complete/all/test : search through all events on 'test', both parts (standard + payload), in all found events and for another 10 seconds. Return complete events.
+* /payload/id/one/PushEvent/test : search on 'test', only in payload, only in PushEvent's. Not real-time. Return only ids.
+* /custom/id/one/PushEvent/test : same one as above.
+* /realtime/600000/id/one/PushEvent/test : search through all found events and for another 10 minutes (real-time) on 'test' and only in PushEvent.
