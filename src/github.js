@@ -12,7 +12,7 @@ const run = require('gen-run');
 // Setup variables
 const hostname = '127.0.0.1';
 const port = 1337;
-const loggingLevel = 8; // 0 = nothing, 4 = some, 9 = all
+const loggingLevel = 8; // 0 = (almost) nothing, 2 = most important things, 4 = some, 6 = everything except loop-like-things, 8 = all
 const eventsURL = 'https://api.github.com/events?per_page=100';
 //const eventsURL = 'https://api.github.com/users/rdroog/events/public?per_page=100';
 const timeout = 5000;
@@ -28,12 +28,13 @@ var nextGithubRequestAt;
 var etag;
 
 // For real-time
-var realtimestream;
 var realtimesubject;
+var minRealtime = 1 * 1000; // 1 second
+var maxRealtime = 24 * 60 * 60 * 1000; // 1 day
 
 // Creates the basic server, above per request, below per server
 http.createServer((req, res) => {
-    logger(0, 'Request received from client');
+    logger(2, 'Request received from client');
     
     const url = req.url.substr(1);
     const indexRealtimeEnd = url.indexOf('/');
@@ -43,18 +44,23 @@ http.createServer((req, res) => {
         // For request via the UI
         fs.readFile('github.html', "binary", function(err, file) {
             if(err) {
+                logger(2, 'Error when reading UI: ' + err);
                 res.writeHead(500, {"Content-Type": "text/plain"});
                 res.write(err + "\n");
                 res.end();
                 return;
             }
+            logger(2, 'UI loaded');
             res.writeHead(200);
             res.write(file, "binary");
         });
     } if(firstparturl === 'realtime') {
         // For real-time request via the API
-        APIInfo = getAPIInfo(req.url.substr(indexRealtimeEnd+1));
-        logger(9, 'APIInfo for real-time received');
+        const indexTimeEnd = url.indexOf('/', indexRealtimeEnd+1);
+        const time = url.substr(indexRealtimeEnd+1, indexTimeEnd-indexRealtimeEnd-1);
+        
+        APIInfo = getAPIInfo(req.url.substr(indexTimeEnd+1));
+        logger(6, 'APIInfo for real-time received');
         
         if(APIInfo.error) {
             res.writeHead(500, {"Content-Type": "text/plain"});
@@ -64,10 +70,10 @@ http.createServer((req, res) => {
             var subscription = realtime(APIInfo, res);
             
             run(function* (gen) {
-                // Sleep until next allowed request at github
-                const sleepFor = 10 * 1000;
+                var sleepFor = Math.max(minRealtime, Math.min(time, maxRealtime));
+                logger(4, 'Duration of realtime subscription: ' + sleepFor + 'ms');
                 yield setTimeout(gen(), sleepFor);
-                logger(0, '>>>>> Time is over');
+                logger(4, 'Realtime subscription time ended');
                 subscription.unsubscribe();
                 endSubscription(res);
             });
@@ -75,7 +81,7 @@ http.createServer((req, res) => {
     } else {
         // For request via the API
         APIInfo = getAPIInfo(req.url);
-        logger(9, 'APIInfo received');
+        logger(6, 'APIInfo for non-real-time received');
         
         if(APIInfo.error) {
             res.writeHead(500, {"Content-Type": "text/plain"});
@@ -89,7 +95,6 @@ http.createServer((req, res) => {
     logger(0, `Server running at http://${hostname}:${port}/`);
     
     realtimesubject = new Rx.ReplaySubject();
-    logger(0, '>>>>> Created real time subject to follow');
     
     nextGithubRequestAt = Date.now();
     
@@ -100,17 +105,17 @@ http.createServer((req, res) => {
 
 function realtime(APIInfo, res) {
     // Bad that some code is copied, good that its in one stream.
-    logger(8, '>>>>> realtime started');
+    logger(6, 'Real-time request started');
     var first = true;
     
     res.write('[');
     
     var subscription = realtimesubject.subscribe(
         function(events) {  
-            logger(4, '>>>>> events received in subscription');
+            logger(6, 'Events in real-time request received');
             events.
                 filter(function(event) {
-                    logger(9, '>>>>> filter1');
+                    logger(8, 'First filter in received events (realtime)');
                     if(APIInfo.APICall === ONEEVENT) {
                         return event.type === APIInfo.APIEvent;
                     } else {
@@ -118,10 +123,11 @@ function realtime(APIInfo, res) {
                     }
                 }).
                 filter(function(event) {
-                    logger(9, '>>>>> filter2');
+                    logger(8, 'Second filter in received events (realtime)');
                     return matchEvent(event, APIInfo);
                 }).
                 map(function(event) {
+                    logger(8, 'Map in received events (realtime)');
                     if(APIInfo.onlyId) {
                         return event.id;
                     } else {
@@ -129,26 +135,26 @@ function realtime(APIInfo, res) {
                     }
                 }).
                 forEach(function(event) {
-                    logger(9, '>>>>> print');
+                    logger(8, 'Print received events (realtime)');
                     printEvent(event, res, first);
                     first = false;
                 }); 
         },
         function(error) { 
-            logger(0, '>>>>> ERROR in realtime: ' + error.message);
+            logger(0, 'ERROR in real-time request: ' + error.message);
         },
         function() { 
             endSubscription(res);
         }
     );
     
-    logger(8, '>>>>> subscription started');
+    logger(8, 'Subscription for real-time request started');
     
     return subscription;
 }
 
 function endSubscription(res) {
-    logger(4, '>>>>> Realtime request complete');
+    logger(4, 'Real-time request complete');
     res.end(']');
 }
 
@@ -157,6 +163,7 @@ function printEvent(event, res, first) {
         res.write(',');
     }
     res.write(JSON.stringify(event, null, '  '));
+    logger(8, 'Printed event: ' + event);
 }
 
 /***** FUNCTIONS EXECUTED PER NON-REALTIME REQUEST *****/
@@ -187,7 +194,7 @@ function getAPIInfo(url) {
         custom = true;
         standard = true;
     } else {
-        logger(0, 'Error in part: ' + part);
+        logger(0, 'ERROR in part: ' + part);
         return {error: "The API-part went wrong, because it was not 'custom', 'payload' (these two are the same), 'standard' or 'both'. It should be: /[part]/all/[regexp] or /[part]/one/[eventType]/[regexp]."};
     }
     
@@ -199,7 +206,7 @@ function getAPIInfo(url) {
     } else if(id === 'complete') {
         onlyId = false;
     } else {
-        logger(0, 'Error in onlyId: ' + id);
+        logger(0, 'ERROR in onlyId: ' + id);
         return {error: "The API-onlyId went wrong, because it was not 'id' or 'complete'. It should be: /[part]/all/[regexp] or /[part]/one/[eventType]/[regexp]."}; //TODO error message
     }
     
@@ -217,15 +224,15 @@ function getAPIInfo(url) {
         
         regexpstr = path.substr(indexEventEnd+1);
     } else {
-        logger(0, 'Error in event call: ' + call);
+        logger(0, 'ERROR in event call: ' + call);
         return {error: "The API-call went wrong, because there was no 'all' or 'one'. It should be: " + apicallstring + "."};
     }
     
-    logger(8, 'APIInfo APICall = ' + APICall);
-    logger(8, 'APIInfo APIEvent = ' + APIEvent);
-    logger(8, 'APIInfo custom: ' + custom);
-    logger(8, 'APIInfo standard: ' + standard);
-    logger(8, 'APIInfo only id: ' + onlyId);
+    logger(6, 'APIInfo APICall = ' + APICall);
+    logger(6, 'APIInfo APIEvent = ' + APIEvent);
+    logger(6, 'APIInfo custom = ' + custom);
+    logger(6, 'APIInfo standard = ' + standard);
+    logger(6, 'APIInfo only id = ' + onlyId);
     
     var regexp = getRegexp(regexpstr)
     
@@ -243,7 +250,7 @@ function getAPIInfo(url) {
 function getRegexp(regexpstr) {
     var regexp = new RegExp(regexpstr, 'i');
     
-    logger(8, 'APIinforegexp = ' + regexpstr);
+    logger(6, 'APIinfo regexp = ' + regexpstr);
     
     return regexp;
 }
@@ -253,6 +260,7 @@ function getRegexp(regexpstr) {
 // 2) only events of the correct type are there
 function filterEventsHardCopy(APIInfo, res) {
     // hard copy for filtering (non real-time because of this).
+    logger(6, 'Created hard copy of events for non-real-time request');
     var events = JSON.parse(JSON.stringify(allevents));
     
     var filteredEvents = filterEvents(APIInfo, events);
@@ -264,13 +272,13 @@ function filterEventsHardCopy(APIInfo, res) {
 // 2) only events of the correct type are there
 function filterEvents(APIInfo, events) {
     if(APIInfo.APICall === ONEEVENT) {
-        logger(8, 'Filtering on one event');
+        logger(6, 'Filtering on one event');
         events = events.
             filter(function(event) {
                 return event.type === APIInfo.APIEvent;
             });
     } else {
-        logger(8, 'Searching through all events');
+        logger(6, 'Searching through all events');
     }
     
     return events;
@@ -278,7 +286,7 @@ function filterEvents(APIInfo, events) {
 
 // Filters the events based on the regular expression
 function filterOnRegexp(events, APIInfo, res) {
-    logger(9, 'filteronregexp');
+    logger(6, 'Going to filter on the regular expression');
     var results = [];
     var matches = 0;
     var nonmatches = 0;
@@ -289,11 +297,11 @@ function filterOnRegexp(events, APIInfo, res) {
              
             // If this event is matched, add it to results
             if(matched) {
-                logger(9, 'match');
+                logger(8, 'Event matched!');
                 matches++;
                 results.push(event);
             } else {
-                logger(9, 'no match');
+                logger(8, 'Event not matched.');
                 nonmatches++;
             }
         });
@@ -302,11 +310,13 @@ function filterOnRegexp(events, APIInfo, res) {
     logger(4, 'Amount of nonmatches: ' + nonmatches);
     
     if(APIInfo.onlyId) {
+        logger(6, 'Returning only the ids of events');
         results = results.
             map(function(event) {
                 return event.id;            
             });
     } else {
+        logger(6, 'Returning everything from events');
         //Do nothing.
     }
     
@@ -319,12 +329,11 @@ function matchEvent(event, APIInfo) {
     var regexp = APIInfo.regexp;
             
     if(!event.payload || JSON.stringify(event.payload) == '{}'){
-        logger(8, 'Event had no payload'); 
-        logger(8, event);
+        logger(4, 'Event had no payload: ' + event);
     } else {
         // API call is for custom (payload) part
         if(APIInfo.custom) {
-            logger(9, 'Searching through custom...'); 
+            logger(8, 'Searching through custom-part...'); 
             //Deprecated events not shown below, non-visible events are, but not used.
             if(event.type === 'CommitCommentEvent' || event.type === 'IssueCommentEvent' || event.type === 'PullRequestReviewCommentEvent') {
                 result = regexp.test(event.payload.comment.body);
@@ -338,10 +347,10 @@ function matchEvent(event, APIInfo) {
                 matched = matched || result;
             } else if(event.type === 'DeploymentEvent') {
                 //Events of this type are not visible in timelines.
-                logger(0, 'This event should not be visible in timelines');
+                logger(0, 'This event should not be visible in timelines (1)');
             } else if(event.type === 'DeploymentStatusEvent') {
                 //Events of this type are not visible in timelines.
-                logger(0, 'This event should not be visible in timelines');
+                logger(0, 'This event should not be visible in timelines (2)');
             } else if(event.type === 'ForkEvent') {
                 result = regexp.test(event.payload.forkee.full_name);
                 matched = matched || result;
@@ -364,10 +373,10 @@ function matchEvent(event, APIInfo) {
                 matched = matched || result;
             } else if(event.type === 'MembershipEvent') {
                 //Events of this type are not visible in timelines.
-                logger(0, 'This event should not be visible in timelines');
+                logger(0, 'ERROR: this event should not be visible in timelines (3)');
             } else if(event.type === 'PageBuildEvent') {
                 //Events of this type are not visible in timelines.
-                logger(0, 'This event should not be visible in timelines');
+                logger(0, 'ERROR: this event should not be visible in timelines (4)');
             } else if(event.type === 'PublicEvent') {
                 result = regexp.test(event.payload.repository.full_name);
                 matched = matched || result;
@@ -395,22 +404,22 @@ function matchEvent(event, APIInfo) {
                 matched = matched || result;
             } else if(event.type === 'StatusEvent') {
                 //Events of this type are not visible in timelines.
-                logger(0, 'This event should not be visible in timelines');
+                logger(0, 'ERROR: this event should not be visible in timelines (5)');
             } else if(event.type === 'TeamAddEvent') {
                 //Events of this type are not visible in timelines.
-                logger(0, 'This event should not be visible in timelines');
+                logger(0, 'ERROR: this event should not be visible in timelines (6)');
             } else if(event.type === 'WatchEvent') {
                 result = regexp.test(event.payload.action);
                 matched = matched || result;
             } else {
-                logger(0, 'Event type not used: ' + event.type);
+                logger(0, 'ERROR: tvent type not used: ' + event.type);
             }
         }
         
         // API call is for standard part
         if(APIInfo.standard) {
             //hard copy
-            logger(9, 'Searching through standard...'); 
+            logger(8, 'Searching through standard-part...'); 
             const eventWithoutPayload = JSON.parse(JSON.stringify(event));
             delete eventWithoutPayload.payload;
             result = regexp.test(JSON.stringify(eventWithoutPayload));
@@ -425,7 +434,7 @@ function matchEvent(event, APIInfo) {
 
 // Starts the connection to Github.
 function startGithubConnection() {
-    logger(8, 'trying to make connection to github...');
+    logger(6, 'Trying to make connection to GitHub...');
     
     options = getOptions();
     
@@ -471,25 +480,25 @@ function nextGithubRequest(options) {
             get(options).
             on('error', function(err) {
                 if(err.code === 'ETIMEDOUT') {
-                    logger(0, 'timeout at github');
+                    logger(0, 'ERROR: timeout at GitHub');
                 } else {
-                    logger(0, 'error occurred at github: ' + err);
+                    logger(0, 'ERROR: occurred at GitHub: ' + err);
                 }
             }).
             on('response', function(response) {
                 if(response.statusCode === 200) {
-                    logger(1, 'github status code correct (' + response.statusCode + ')');
+                    logger(4, 'GitHub status code correct (' + response.statusCode + ')');
                 } else if(response.statusCode === 304) {
-                    logger(0, 'not modified since last request');
+                    logger(2, 'No modification since last request');
                 } else {
-                    logger(0, 'incorrect github status code: ' + response.statusCode);
+                    logger(0, 'ERROR: GitHub status code: ' + response.statusCode);
                 }
                 
                 getNextGithubRequestAt(response.headers);
                 etag = response.headers['etag'];
             }).
             on('data', function(chunk) {
-                logger(9, 'received data');
+                logger(8, 'Received some data...');
                 data += chunk;
             }).
             on('end', function() {
@@ -498,12 +507,12 @@ function nextGithubRequest(options) {
                 
                 realtimesubject.next(newevents);
                 
-                logger(8, '-----end of data-----');
+                logger(8, 'Data stream ended');
                 
                 options = getOptions();
                 nextGithubRequest(options);
             });
-        logger(4, 'request sent to Github');
+        logger(2, 'Request sent to Github');
     });
 }
 
@@ -520,27 +529,27 @@ function getNextGithubRequestAt(headers) {
     
     if(rateRemaining <= 1) {
         nextRequestIn = rateReset - now + 1 * 10000; // Try again 10 seconds after reset
-        logger(7, 'first');
+        logger(2, 'Remaining rate too low');
     } else {
         const calculation = (rateReset - now) / rateRemaining;
         nextRequestIn = Math.max(pollinterval/1000, calculation);
         if(nextRequestIn < 1) { // In case of error, etc.
             nextRequestIn = 10 * 1000; // Wait 10 seconds
         }
-        logger(7, 'second');
+        logger(6, 'Remaining rate is okay');
     }
     
     nextGithubRequestAt = now + nextRequestIn;
     
     const nextDate = new Date(nextGithubRequestAt);
     
-    logger(7, 'x-poll-interval: ' + pollinterval);
-    logger(7, 'x-ratelimit-limit: ' + headers['x-ratelimit-limit']);
-    logger(7, 'x-ratelimit-remaining: ' + rateRemaining);
-    logger(7, 'x-ratelimit-reset: ' + rateReset.toUTCString()  + ' (UTC)');
-    logger(7, 'calculated next request in: ' + nextRequestIn  + ' ms');
+    logger(6, 'x-poll-interval: ' + pollinterval);
+    logger(6, 'x-ratelimit-limit: ' + headers['x-ratelimit-limit']);
+    logger(6, 'x-ratelimit-remaining: ' + rateRemaining);
+    logger(6, 'x-ratelimit-reset: ' + dateToStr(rateReset)  + ' (UTC)');
+    logger(6, 'Calculated next request in: ' + nextRequestIn  + ' ms');
     
-    logger(4, 'next github request at: ' + nextDate.toUTCString()  + ' (UTC)');
+    logger(2, 'Next GitHub request at: ' + dateToStr(nextDate)  + ' (UTC)');
 }
 
 /***** UTILITY FUNCTIONS *****/
@@ -548,6 +557,42 @@ function getNextGithubRequestAt(headers) {
 // Simple logger function based on the selected level.
 function logger(level, str) {
     if(loggingLevel >= level) {
-        console.log(str);
+        const now = new Date(Date.now());
+        const nowstr = dateToStr(now);
+        console.log(nowstr + ': ' + str);
     }
+}
+
+function dateToStr(date) {
+    var month = leftpad2(date.getMonth() + 1);  // getMonth() is zero based
+    var day = leftpad2(date.getDate());
+    var hours = leftpad2(date.getHours());
+    var minutes = leftpad2(date.getMinutes());
+    var seconds = leftpad2(date.getSeconds());
+    var ymd = date.getFullYear() + '-' + month + '-' + day;
+    var hms = hours + ':' + minutes + ':' + seconds;
+    var str = ymd + '  ' + hms + ' ' + date.getMilliseconds() + 'ms';
+
+    return str;
+}
+
+function leftpad2(n) {
+    if(n < 10) {
+        str = '0' + n;
+    } else {
+        str = n;
+    }
+    return str;
+}
+function leftpadms(n) {
+    if(n < 10) {
+        str = '   ' + n;
+    } else if(n < 100) {
+        str = '  ' + n;
+    } else if(n < 1000) {
+        str = ' ' + n;
+    } else {
+        str = n;
+    }
+    return str;
 }
