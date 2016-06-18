@@ -12,7 +12,7 @@ const run = require('gen-run');
 // Setup variables
 const hostname = '127.0.0.1';
 const port = 1337;
-const loggingLevel = 8; // 0 = (almost) nothing, 2 = most important things, 4 = some, 6 = everything except loop-like-things, 8 = all
+const loggingLevel = 4; // 0 = (almost) nothing, 2 = most important things, 4 = some, 6 = everything except loop-like-things, 8 = all
 const eventsURL = 'https://api.github.com/events?per_page=100';
 //const eventsURL = 'https://api.github.com/users/rdroog/events/public?per_page=100';
 const timeout = 5000;
@@ -53,6 +53,7 @@ http.createServer((req, res) => {
             logger(2, 'UI loaded');
             res.writeHead(200);
             res.write(file, "binary");
+            res.end();
         });
     } else if(firstparturl === 'realtime') {
         // For real-time request via the API
