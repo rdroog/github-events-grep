@@ -415,16 +415,16 @@ function getNextGithubRequestAt(headers) {
     const rateReset = new Date(headers['x-ratelimit-reset'] * 1000); // in ms
     const now = Date.now();
     
-    const calculation = (rateReset - now) / rateRemaining;
-    
     var nextRequestIn;
     
-    if(!pollinterval) {
-        nextRequestIn = 1000;
-    } else if(calculation == 'NaN') {
-        nextRequestIn = pollinterval/1000;
+    if(rateRemaining == 0) {
+        nextRequestIn = rateReset - now;
     } else {
+        const calculation = (rateReset - now) / rateRemaining;
         nextRequestIn = Math.max(pollinterval/1000, calculation);
+        if(nextRequestIn < 1) { // In case of error, etc.
+            nextRequestIn = 1000; // 1 second.
+        }
     }
     
     nextGithubRequestAt = now + nextRequestIn;
