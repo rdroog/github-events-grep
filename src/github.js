@@ -44,7 +44,7 @@ http.createServer((req, res) => {
         // For request via the UI
         fs.readFile('github.html', "binary", function(err, file) {
             if(err) {
-                logger(2, 'Error when reading UI: ' + err);
+                logger(0, 'Error when reading UI: ' + err);
                 res.writeHead(500, {"Content-Type": "text/plain"});
                 res.write(err + "\n");
                 res.end();
@@ -105,7 +105,7 @@ http.createServer((req, res) => {
 
 function realtime(APIInfo, res) {
     // Bad that some code is copied, good that its in one stream.
-    logger(6, 'Real-time request started');
+    logger(2, 'Real-time request started');
     var first = true;
     
     res.write('[');
@@ -148,13 +148,13 @@ function realtime(APIInfo, res) {
         }
     );
     
-    logger(8, 'Subscription for real-time request started');
+    logger(6, 'Subscription for real-time request started');
     
     return subscription;
 }
 
 function endSubscription(res) {
-    logger(4, 'Real-time request complete');
+    logger(2, 'Real-time request complete');
     res.end(']');
 }
 
@@ -329,7 +329,7 @@ function matchEvent(event, APIInfo) {
     var regexp = APIInfo.regexp;
             
     if(!event.payload || JSON.stringify(event.payload) == '{}'){
-        logger(4, 'Event had no payload: ' + event);
+        logger(2, 'Event had no payload: ' + event);
     } else {
         // API call is for custom (payload) part
         if(APIInfo.custom) {
@@ -347,10 +347,10 @@ function matchEvent(event, APIInfo) {
                 matched = matched || result;
             } else if(event.type === 'DeploymentEvent') {
                 //Events of this type are not visible in timelines.
-                logger(0, 'This event should not be visible in timelines (1)');
+                logger(0, 'ERROR: this event should not be visible in timelines (1)');
             } else if(event.type === 'DeploymentStatusEvent') {
                 //Events of this type are not visible in timelines.
-                logger(0, 'This event should not be visible in timelines (2)');
+                logger(0, 'ERROR: this event should not be visible in timelines (2)');
             } else if(event.type === 'ForkEvent') {
                 result = regexp.test(event.payload.forkee.full_name);
                 matched = matched || result;
@@ -415,16 +415,16 @@ function matchEvent(event, APIInfo) {
                 logger(0, 'ERROR: tvent type not used: ' + event.type);
             }
         }
+    }
         
-        // API call is for standard part
-        if(APIInfo.standard) {
-            //hard copy
-            logger(8, 'Searching through standard-part...'); 
-            const eventWithoutPayload = JSON.parse(JSON.stringify(event));
-            delete eventWithoutPayload.payload;
-            result = regexp.test(JSON.stringify(eventWithoutPayload));
-            matched = matched || result;
-        }
+    // API call is for standard part
+    if(APIInfo.standard) {
+        //hard copy
+        logger(8, 'Searching through standard-part...'); 
+        const eventWithoutPayload = JSON.parse(JSON.stringify(event));
+        delete eventWithoutPayload.payload;
+        result = regexp.test(JSON.stringify(eventWithoutPayload));
+        matched = matched || result;
     }
     
     return matched;
@@ -434,7 +434,7 @@ function matchEvent(event, APIInfo) {
 
 // Starts the connection to Github.
 function startGithubConnection() {
-    logger(6, 'Trying to make connection to GitHub...');
+    logger(2, 'Trying to make connection to GitHub...');
     
     options = getOptions();
     
@@ -507,7 +507,7 @@ function nextGithubRequest(options) {
                 
                 realtimesubject.next(newevents);
                 
-                logger(8, 'Data stream ended');
+                logger(6, 'Data stream ended');
                 
                 options = getOptions();
                 nextGithubRequest(options);
@@ -563,6 +563,7 @@ function logger(level, str) {
     }
 }
 
+// One time-format for the whole library.
 function dateToStr(date) {
     var month = leftpad2(date.getMonth() + 1);  // getMonth() is zero based
     var day = leftpad2(date.getDate());
@@ -576,6 +577,7 @@ function dateToStr(date) {
     return str;
 }
 
+// Leftpad function for numbers of length up to 2, to length of 2
 function leftpad2(n) {
     if(n < 10) {
         str = '0' + n;
@@ -584,6 +586,8 @@ function leftpad2(n) {
     }
     return str;
 }
+
+// Leftpad function for ms to length of 4
 function leftpadms(n) {
     if(n < 10) {
         str = '   ' + n;
