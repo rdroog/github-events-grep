@@ -54,7 +54,7 @@ http.createServer((req, res) => {
             res.writeHead(200);
             res.write(file, "binary");
         });
-    } if(firstparturl === 'realtime') {
+    } else if(firstparturl === 'realtime') {
         // For real-time request via the API
         const indexTimeEnd = url.indexOf('/', indexRealtimeEnd+1);
         const time = url.substr(indexRealtimeEnd+1, indexTimeEnd-indexRealtimeEnd-1);
