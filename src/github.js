@@ -14,11 +14,10 @@ const hostname = '127.0.0.1';
 const port = 1337;
 const loggingLevel = 6; // 0 = (almost) nothing, 2 = most important things, 4 = some, 6 = everything except loop-like-things, 8 = all
 const eventsURL = 'https://api.github.com/events?per_page=100';
-//const eventsURL = 'https://api.github.com/users/rdroog/events/public?per_page=100';
 const timeout = 5000;
-const apicallstring = "/[{custom,payload,standard,both}]/[{id,complete}]/all/[regexp] or /[{custom,payload,standard,both}]/[{id,complete}]/one/[eventType]/[regexp]";
+const apicallstring = "/[{realtime/[ms]/,}[{custom,payload,standard,both}]/[{id,complete}]/all/[regexp] or /[{realtime/[ms]/,}[{custom,payload,standard,both}]/[{id,complete}]/one/[eventType]/[regexp]";
 
-//Type of API call
+// Type of API call
 const ALLEVENTS = 'all';
 const ONEEVENT = 'one';
 
