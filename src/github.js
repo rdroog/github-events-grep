@@ -3,7 +3,7 @@
 // Necessary packages
 const http = require('http');
 const fs = require('fs');
-const Rx = require('rx');
+const Rx = require('rxjs');
 const DOM = require('rx-dom');
 const RxNode = require('rx-node');
 const request = require('request');
@@ -28,25 +28,47 @@ var nextGithubRequestAt;
 var etag;
 
 // For real-time
-var stream;
+var realtimestream;
+var realtimesubject;
 
 // Creates the basic server, above per request, below per server
 http.createServer((req, res) => {
     logger(0, 'Request received from client');
     res.writeHead(200, { 'Content-Type': 'text/plain'});
     
-    if(req.url === '/ui') {
+    const url = req.url.substr(1);
+    const indexRealtimeEnd = url.indexOf('/');
+    const firstparturl = url.substr(0, indexRealtimeEnd);
+    
+    if(url === 'ui') {
         // For request via the UI
         fs.readFile('github.html', "binary", function(err, file) {
             if(err) {
-                response.writeHead(500, {"Content-Type": "text/plain"});
-                response.write(err + "\n");
-                response.end();
+                res.writeHead(500, {"Content-Type": "text/plain"});
+                res.write(err + "\n");
+                res.end();
                 return;
             }
             res.writeHead(200);
             res.write(file, "binary");
         });
+    } if(firstparturl === 'realtime') {
+        // For real-time request via the API
+        APIInfo = getAPIInfo(req.url.substr(indexRealtimeEnd+1));
+        logger(9, 'APIInfo for real-time received');
+        
+        if(APIInfo.error) {
+            res.end(JSON.stringify(APIInfo));
+        } else {
+            var subscription = realtime(APIInfo, res);
+            logger(8, '>>>>> Sleep for 2 minutes...');
+            run(function* (gen) {
+                const sleepFor = (2 * 60 * 1000); // 2 minutes
+                yield setTimeout(gen(), sleepFor);
+                logger(8, '>>>>> Done sleeping!');
+                subscription.unsubscribe();
+            });
+        }
     } else {
         // For request via the API
         APIInfo = getAPIInfo(req.url);
@@ -61,12 +83,100 @@ http.createServer((req, res) => {
 }).listen(port, hostname, () => {
     logger(0, `Server running at http://${hostname}:${port}/`);
     
+    /* realtimestream = Rx.Observable.create(function(observer) {
+        
+    }); */
+    realtimesubject = new Rx.Subject();
+    
+    /* var APIInfo = {
+        custom: true,
+        standard: true,
+        APICall: ALLEVENTS,
+        APIEvent: '',
+        onlyId: false,
+        regexp: getRegexp('test')
+    };
+
+    realtime(APIInfo);  */
+    logger(0, '>>>>> Created real time subject to follow');
+    
     nextGithubRequestAt = Date.now();
     
     startGithubConnection();    
+    
 });
 
-/***** FUNCTIONS EXECUTED PER REQUEST *****/
+/***** FUNCTIONS EXECUTED FOR REAL-TIME RESULTS *****/
+
+function realtime(APIInfo, res) {
+    // Bad that some code is copied, good that its in one stream.
+    logger(8, '>>>>> realtime started');
+    
+    res.write('[');
+    
+    var subscription = realtimesubject.subscribe(
+        function(events) { 
+            // If not searching on all events check if event.type matches the APIEvent.
+            /* if(APIInfo.APICall === ALLEVENTS || event.type === APIInfo.APIEvent) {
+                if(matchEvent(event)) {
+                    printEvent(event, APIInfo);
+                }
+            }   */  
+            logger(8, '>>>>> events received in subscription');
+            events.
+                filter(function(event) {
+                    logger(9, '>>>>> filter1');
+                    if(APIInfo.APICall === ONEEVENT) {
+                        return event.type === APIInfo.APIEvent;
+                    } else {
+                        return true;
+                    }
+                }).
+                filter(function(event) {
+                    logger(9, '>>>>> filter2');
+                    return matchEvent(event, APIInfo);
+                }).map(function(event) {
+                    if(APIInfo.onlyId) {
+                        return event.id;
+                    } else {
+                        return event;
+                    }
+                }).forEach(function(event) {
+                    logger(9, '>>>>> print');
+                    printEvent(event, res);
+                }); 
+        },
+        function(error) { 
+            logger(0, '>>>>> ERROR in realtime: ' + error.message);
+        },
+        function() { 
+            res.write(']');
+            res.end();
+            logger(8, '>>>>> Realtime request complete');
+        }
+    );
+    
+    logger(8, '>>>>> subscription started');
+    
+    return subscription;
+    
+ /*    realtimestream.
+        filter(function(event) {
+        }).
+        filter(function(event) {
+            logger(8, "REAL-TIME MATCH");
+        }).
+        subscribe(function(event) {
+        }); */
+}
+
+function printEvent(event, res) {
+    res.write(JSON.stringify(event, null, '  '));
+    res.write(',');
+    //logger(8, JSON.stringify(event)); // TODO: this is not how it should work.
+}
+
+/***** FUNCTIONS EXECUTED PER NON-REALTIME REQUEST *****/
 
 // Gets all the info from the API call:
 // - If either in the custom part, the payload part of both should be search
@@ -162,12 +272,14 @@ function filterEventsHardCopy(APIInfo, res) {
     // hard copy for filtering (non real-time because of this).
     var events = JSON.parse(JSON.stringify(allevents));
     
-    filterEvents(APIInfo, res, events);
+    var filteredEvents = filterEvents(APIInfo, events);
+    
+    filterOnRegexp(filteredEvents, APIInfo, res);
 }
 
 // Filters the event stream so that 
 // 2) only events of the correct type are there
-function filterEvents(APIInfo, res, events) {
+function filterEvents(APIInfo, events) {
     if(APIInfo.APICall === ONEEVENT) {
         logger(8, 'Filtering on one event');
         events = events.
@@ -178,7 +290,7 @@ function filterEvents(APIInfo, res, events) {
         logger(8, 'Searching through all events');
     }
     
-    filterOnRegexp(events, APIInfo, res);
+    return events;
 }
 
 // Filters the events based on the regular expression
@@ -187,8 +299,6 @@ function filterOnRegexp(events, APIInfo, res) {
     var results = [];
     var matches = 0;
     var nonmatches = 0;
-    
-    regexp = APIInfo.regexp;
     
     events.
         forEach(function(event) {
@@ -223,6 +333,7 @@ function filterOnRegexp(events, APIInfo, res) {
 // Returns if an event is matched with the given APIInfo
 function matchEvent(event, APIInfo) {
     var matched = false;
+    var regexp = APIInfo.regexp;
             
     if(!event.payload || JSON.stringify(event.payload) == '{}'){
         logger(8, 'Event had no payload'); 
@@ -397,12 +508,13 @@ function nextGithubRequest(options) {
             on('data', function(chunk) {
                 logger(9, 'received data');
                 data += chunk;
-                
-                
             }).
             on('end', function() {
                 var newevents = JSON.parse(data);
                 allevents = allevents.concat(newevents);
+                
+                realtimesubject.next(newevents);
+                
                 logger(8, '-----end of data-----');
                 
                 options = getOptions();
@@ -424,7 +536,7 @@ function getNextGithubRequestAt(headers) {
     var nextRequestIn;
     
     if(rateRemaining == 0) {
-        nextRequestIn = rateReset - now;
+        nextRequestIn = rateReset - now + 1 * 1000; //Plus one second
     } else {
         const calculation = (rateReset - now) / rateRemaining;
         nextRequestIn = Math.max(pollinterval/1000, calculation);
