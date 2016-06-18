@@ -34,7 +34,6 @@ var realtimesubject;
 // Creates the basic server, above per request, below per server
 http.createServer((req, res) => {
     logger(0, 'Request received from client');
-    res.writeHead(200, { 'Content-Type': 'text/plain'});
     
     const url = req.url.substr(1);
     const indexRealtimeEnd = url.indexOf('/');
@@ -58,15 +57,19 @@ http.createServer((req, res) => {
         logger(9, 'APIInfo for real-time received');
         
         if(APIInfo.error) {
-            res.end(JSON.stringify(APIInfo));
+            res.writeHead(500, {"Content-Type": "text/plain"});
+            res.end(JSON.stringify(APIInfo, null, '  '));
         } else {
+            res.writeHead(200, { 'Content-Type': 'text/plain'});
             var subscription = realtime(APIInfo, res);
-            logger(8, '>>>>> Sleep for 2 minutes...');
+            
             run(function* (gen) {
-                const sleepFor = (2 * 60 * 1000); // 2 minutes
+                // Sleep until next allowed request at github
+                const sleepFor = 10 * 1000;
                 yield setTimeout(gen(), sleepFor);
-                logger(8, '>>>>> Done sleeping!');
+                logger(0, '>>>>> Time is over');
                 subscription.unsubscribe();
+                endSubscription(res);
             });
         }
     } else {
@@ -75,35 +78,22 @@ http.createServer((req, res) => {
         logger(9, 'APIInfo received');
         
         if(APIInfo.error) {
-            res.end(JSON.stringify(APIInfo));
+            res.writeHead(500, {"Content-Type": "text/plain"});
+            res.end(JSON.stringify(APIInfo, null, '  '));
         } else {
+            res.writeHead(200, { 'Content-Type': 'text/plain'});
             filterEventsHardCopy(APIInfo, res);
         }
     }
 }).listen(port, hostname, () => {
     logger(0, `Server running at http://${hostname}:${port}/`);
     
-    /* realtimestream = Rx.Observable.create(function(observer) {
-        
-    }); */
-    realtimesubject = new Rx.Subject();
-    
-    /* var APIInfo = {
-        custom: true,
-        standard: true,
-        APICall: ALLEVENTS,
-        APIEvent: '',
-        onlyId: false,
-        regexp: getRegexp('test')
-    };
-
-    realtime(APIInfo);  */
+    realtimesubject = new Rx.ReplaySubject();
     logger(0, '>>>>> Created real time subject to follow');
     
     nextGithubRequestAt = Date.now();
     
-    startGithubConnection();    
-    
+    startGithubConnection();
 });
 
 /***** FUNCTIONS EXECUTED FOR REAL-TIME RESULTS *****/
@@ -111,18 +101,13 @@ http.createServer((req, res) => {
 function realtime(APIInfo, res) {
     // Bad that some code is copied, good that its in one stream.
     logger(8, '>>>>> realtime started');
+    var first = true;
     
     res.write('[');
     
     var subscription = realtimesubject.subscribe(
-        function(events) { 
-            // If not searching on all events check if event.type matches the APIEvent.
-            /* if(APIInfo.APICall === ALLEVENTS || event.type === APIInfo.APIEvent) {
-                if(matchEvent(event)) {
-                    printEvent(event, APIInfo);
-                }
-            }   */  
-            logger(8, '>>>>> events received in subscription');
+        function(events) {  
+            logger(4, '>>>>> events received in subscription');
             events.
                 filter(function(event) {
                     logger(9, '>>>>> filter1');
@@ -135,45 +120,43 @@ function realtime(APIInfo, res) {
                 filter(function(event) {
                     logger(9, '>>>>> filter2');
                     return matchEvent(event, APIInfo);
-                }).map(function(event) {
+                }).
+                map(function(event) {
                     if(APIInfo.onlyId) {
                         return event.id;
                     } else {
                         return event;
                     }
-                }).forEach(function(event) {
+                }).
+                forEach(function(event) {
                     logger(9, '>>>>> print');
-                    printEvent(event, res);
+                    printEvent(event, res, first);
+                    first = false;
                 }); 
         },
         function(error) { 
             logger(0, '>>>>> ERROR in realtime: ' + error.message);
         },
         function() { 
-            res.write(']');
-            res.end();
-            logger(8, '>>>>> Realtime request complete');
+            endSubscription(res);
         }
     );
     
     logger(8, '>>>>> subscription started');
     
     return subscription;
-    
- /*    realtimestream.
-        filter(function(event) {
-        }).
-        filter(function(event) {
-            logger(8, "REAL-TIME MATCH");
-        }).
-        subscribe(function(event) {
-        }); */
 }
 
-function printEvent(event, res) {
+function endSubscription(res) {
+    logger(4, '>>>>> Realtime request complete');
+    res.end(']');
+}
+
+function printEvent(event, res, first) {
+    if(!first) { 
+        res.write(',');
+    }
     res.write(JSON.stringify(event, null, '  '));
-    res.write(',');
-    //logger(8, JSON.stringify(event)); // TODO: this is not how it should work.
 }
 
 /***** FUNCTIONS EXECUTED PER NON-REALTIME REQUEST *****/
@@ -535,26 +518,27 @@ function getNextGithubRequestAt(headers) {
     
     var nextRequestIn;
     
-    if(rateRemaining == 0) {
-        nextRequestIn = rateReset - now + 1 * 1000; //Plus one second
+    if(rateRemaining <= 1) {
+        nextRequestIn = rateReset - now + 1 * 10000; // Try again 10 seconds after reset
+        logger(7, 'first');
     } else {
         const calculation = (rateReset - now) / rateRemaining;
         nextRequestIn = Math.max(pollinterval/1000, calculation);
         if(nextRequestIn < 1) { // In case of error, etc.
-            nextRequestIn = 1000; // 1 second.
+            nextRequestIn = 10 * 1000; // Wait 10 seconds
         }
+        logger(7, 'second');
     }
     
     nextGithubRequestAt = now + nextRequestIn;
     
     const nextDate = new Date(nextGithubRequestAt);
     
-    logger(8, 'x-poll-interval: ' + pollinterval);
-    logger(8, 'x-ratelimit-limit: ' + headers['x-ratelimit-limit']);
-    logger(8, 'x-ratelimit-remaining: ' + rateRemaining);
-    logger(8, 'x-ratelimit-reset: ' + rateReset.toUTCString()  + ' (UTC)');
-    logger(8, 'calculated next request in: ' + nextRequestIn  + ' ms');
-    logger(8, 'calculation: ' + calculation);
+    logger(7, 'x-poll-interval: ' + pollinterval);
+    logger(7, 'x-ratelimit-limit: ' + headers['x-ratelimit-limit']);
+    logger(7, 'x-ratelimit-remaining: ' + rateRemaining);
+    logger(7, 'x-ratelimit-reset: ' + rateReset.toUTCString()  + ' (UTC)');
+    logger(7, 'calculated next request in: ' + nextRequestIn  + ' ms');
     
     logger(4, 'next github request at: ' + nextDate.toUTCString()  + ' (UTC)');
 }
