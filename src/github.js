@@ -16,6 +16,7 @@ const loggingLevel = 8; // 0 = nothing, 4 = some, 9 = all
 const eventsURL = 'https://api.github.com/events?per_page=100';
 //const eventsURL = 'https://api.github.com/users/rdroog/events/public?per_page=100';
 const timeout = 5000;
+const apicallstring = "/[{custom,payload,standard,both}]/[{id,complete}]/all/[regexp] or /[{custom,payload,standard,both}]/[{id,complete}]/one/[eventType]/[regexp]";
 
 //Type of API call
 const ALLEVENTS = 'all';
@@ -25,6 +26,9 @@ const ONEEVENT = 'one';
 var allevents = [];
 var nextGithubRequestAt;
 var etag;
+
+// For real-time
+var stream;
 
 // Creates the basic server, above per request, below per server
 http.createServer((req, res) => {
@@ -76,6 +80,7 @@ function getAPIInfo(url) {
     
     var custom = false;
     var standard = false;
+    var onlyId = false;
     var APICall;
     var APIEvent = "";
     var regexpstr;
@@ -93,8 +98,20 @@ function getAPIInfo(url) {
         return {error: "The API-part went wrong, because it was not 'custom', 'payload' (these two are the same), 'standard' or 'both'. It should be: /[part]/all/[regexp] or /[part]/one/[eventType]/[regexp]."};
     }
     
-    const indexCallEnd = path.indexOf('/', indexPartEnd+1);
-    const call = path.substr(indexPartEnd+1, indexCallEnd-indexPartEnd-1);
+    const indexIdEnd = path.indexOf('/', indexPartEnd+1);
+    const id = path.substr(indexPartEnd+1, indexIdEnd-indexPartEnd-1);
+    
+    if(id === 'id') {
+        onlyId = true;
+    } else if(id === 'complete') {
+        onlyId = false;
+    } else {
+        logger(0, 'Error in onlyId: ' + id);
+        return {error: "The API-onlyId went wrong, because it was not 'id' or 'complete'. It should be: /[part]/all/[regexp] or /[part]/one/[eventType]/[regexp]."}; //TODO error message
+    }
+    
+    const indexCallEnd = path.indexOf('/', indexIdEnd+1);
+    const call = path.substr(indexIdEnd+1, indexCallEnd-indexIdEnd-1);
     
     // Gets if all or one event should be search, and if one, which one.
     if(call === ALLEVENTS) {
@@ -108,13 +125,14 @@ function getAPIInfo(url) {
         regexpstr = path.substr(indexEventEnd+1);
     } else {
         logger(0, 'Error in event call: ' + call);
-        return {error: "The API-call went wrong, because there was no 'all' or 'one'. It should be: /[part]/all/[regexp] or /[part]/one/[eventType]/[regexp]."};
+        return {error: "The API-call went wrong, because there was no 'all' or 'one'. It should be: " + apicallstring + "."};
     }
     
     logger(8, 'APIInfo APICall = ' + APICall);
     logger(8, 'APIInfo APIEvent = ' + APIEvent);
     logger(8, 'APIInfo custom: ' + custom);
     logger(8, 'APIInfo standard: ' + standard);
+    logger(8, 'APIInfo only id: ' + onlyId);
     
     var regexp = getRegexp(regexpstr)
     
@@ -123,6 +141,7 @@ function getAPIInfo(url) {
         standard: standard,
         APICall: APICall,
         APIEvent: APIEvent,
+        onlyId: onlyId,
         regexp: regexp
     };
 }
@@ -167,107 +186,7 @@ function filterOnRegexp(events, APIInfo, res) {
     
     events.
         forEach(function(event) {
-            var matched = false;
-            
-            if(!event.payload || JSON.stringify(event.payload) == '{}'){
-                logger(8, 'Event had no payload'); 
-                logger(8, event);
-            } else {
-                // API call is for custom (payload) part
-                if(APIInfo.custom) {
-                    logger(9, 'Searching through custom...'); 
-                    //Deprecated events not shown below, non-visible events are, but not used.
-                    if(event.type === 'CommitCommentEvent' || event.type === 'IssueCommentEvent' || event.type === 'PullRequestReviewCommentEvent') {
-                        result = regexp.test(event.payload.comment.body);
-                        matched = matched || result;
-                    } else if(event.type === 'CreateEvent') {
-                        result = regexp.test(event.payload.description);
-                        matched = matched || result;
-                    } else if(event.type === 'DeleteEvent') {
-                        result = regexp.test(event.payload.ref) 
-                              || regexp.test(event.payload.reftype);
-                        matched = matched || result;
-                    } else if(event.type === 'DeploymentEvent') {
-                        //Events of this type are not visible in timelines.
-                        logger(0, 'This event should not be visible in timelines');
-                    } else if(event.type === 'DeploymentStatusEvent') {
-                        //Events of this type are not visible in timelines.
-                        logger(0, 'This event should not be visible in timelines');
-                    } else if(event.type === 'ForkEvent') {
-                        result = regexp.test(event.payload.forkee.full_name);
-                        matched = matched || result;
-                    } else if(event.type === 'GollumEvent') {
-                        event.payload.pages.
-                            forEach(function(page) {
-                                result = regexp.test(page.page_name) 
-                                      || regexp.test(page.title) 
-                                      || regexp.test(page.summary);
-                                matched = matched || result;
-                            });
-                    } else if(event.type === 'IssuesEvent') {
-                        result = regexp.test(event.payload.action) 
-                              || regexp.test(event.payload.issue.title) 
-                              || regexp.test(event.payload.issue.body);
-                        matched = matched || result;
-                    } else if(event.type === 'MemberEvent') {
-                        result = regexp.test(event.payload.action) 
-                              || regexp.test(event.payload.member.login);
-                        matched = matched || result;
-                    } else if(event.type === 'MembershipEvent') {
-                        //Events of this type are not visible in timelines.
-                        logger(0, 'This event should not be visible in timelines');
-                    } else if(event.type === 'PageBuildEvent') {
-                        //Events of this type are not visible in timelines.
-                        logger(0, 'This event should not be visible in timelines');
-                    } else if(event.type === 'PublicEvent') {
-                        result = regexp.test(event.payload.repository.full_name);
-                        matched = matched || result;
-                    } else if(event.type === 'PullRequestEvent') {
-                        result = regexp.test(event.payload.action)
-                              || regexp.test(event.payload.pull_request.state) 
-                              || regexp.test(event.payload.pull_request.title) 
-                              || regexp.test(event.payload.pull_request.body);
-                        matched = matched || result;
-                    } else if(event.type === 'PushEvent') {
-                        event.payload.commits.
-                            forEach(function(commit) {
-                                result = regexp.test(commit.message);
-                                matched = matched || result;
-                            });
-                    } else if(event.type === 'ReleaseEvent') {
-                        result = regexp.test(event.payload.action)
-                              || regexp.test(event.payload.release.name)
-                              || regexp.test(event.payload.release.body);
-                        matched = matched || result;
-                    } else if(event.type === 'RepositoryEvent') {
-                        result = regexp.test(event.payload.action)
-                              || regexp.test(event.payload.repository.full_name)
-                              || regexp.test(event.payload.repository.description);
-                        matched = matched || result;
-                    } else if(event.type === 'StatusEvent') {
-                        //Events of this type are not visible in timelines.
-                        logger(0, 'This event should not be visible in timelines');
-                    } else if(event.type === 'TeamAddEvent') {
-                        //Events of this type are not visible in timelines.
-                        logger(0, 'This event should not be visible in timelines');
-                    } else if(event.type === 'WatchEvent') {
-                        result = regexp.test(event.payload.action);
-                        matched = matched || result;
-                    } else {
-                        logger(0, 'Event type not used: ' + event.type);
-                    }
-                }
-                
-                // API call is for standard part
-                if(APIInfo.standard) {
-                    //hard copy
-                    logger(9, 'Searching through standard...'); 
-                    const eventWithoutPayload = JSON.parse(JSON.stringify(event));
-                    delete eventWithoutPayload.payload;
-                    result = regexp.test(JSON.stringify(eventWithoutPayload));
-                    matched = matched || result;
-                }
-            }
+            var matched = matchEvent(event, APIInfo);
              
             // If this event is matched, add it to results
             if(matched) {
@@ -283,7 +202,123 @@ function filterOnRegexp(events, APIInfo, res) {
     logger(4, 'Amount of matches: ' + matches);
     logger(4, 'Amount of nonmatches: ' + nonmatches);
     
+    if(APIInfo.onlyId) {
+        results = results.
+            map(function(event) {
+                return event.id;            
+            });
+    } else {
+        //Do nothing.
+    }
+    
     res.end(JSON.stringify(results, null, '  '));
+}
+
+// Returns if an event is matched with the given APIInfo
+function matchEvent(event, APIInfo) {
+    var matched = false;
+            
+    if(!event.payload || JSON.stringify(event.payload) == '{}'){
+        logger(8, 'Event had no payload'); 
+        logger(8, event);
+    } else {
+        // API call is for custom (payload) part
+        if(APIInfo.custom) {
+            logger(9, 'Searching through custom...'); 
+            //Deprecated events not shown below, non-visible events are, but not used.
+            if(event.type === 'CommitCommentEvent' || event.type === 'IssueCommentEvent' || event.type === 'PullRequestReviewCommentEvent') {
+                result = regexp.test(event.payload.comment.body);
+                matched = matched || result;
+            } else if(event.type === 'CreateEvent') {
+                result = regexp.test(event.payload.description);
+                matched = matched || result;
+            } else if(event.type === 'DeleteEvent') {
+                result = regexp.test(event.payload.ref) 
+                      || regexp.test(event.payload.reftype);
+                matched = matched || result;
+            } else if(event.type === 'DeploymentEvent') {
+                //Events of this type are not visible in timelines.
+                logger(0, 'This event should not be visible in timelines');
+            } else if(event.type === 'DeploymentStatusEvent') {
+                //Events of this type are not visible in timelines.
+                logger(0, 'This event should not be visible in timelines');
+            } else if(event.type === 'ForkEvent') {
+                result = regexp.test(event.payload.forkee.full_name);
+                matched = matched || result;
+            } else if(event.type === 'GollumEvent') {
+                event.payload.pages.
+                    forEach(function(page) {
+                        result = regexp.test(page.page_name) 
+                              || regexp.test(page.title) 
+                              || regexp.test(page.summary);
+                        matched = matched || result;
+                    });
+            } else if(event.type === 'IssuesEvent') {
+                result = regexp.test(event.payload.action) 
+                      || regexp.test(event.payload.issue.title) 
+                      || regexp.test(event.payload.issue.body);
+                matched = matched || result;
+            } else if(event.type === 'MemberEvent') {
+                result = regexp.test(event.payload.action) 
+                      || regexp.test(event.payload.member.login);
+                matched = matched || result;
+            } else if(event.type === 'MembershipEvent') {
+                //Events of this type are not visible in timelines.
+                logger(0, 'This event should not be visible in timelines');
+            } else if(event.type === 'PageBuildEvent') {
+                //Events of this type are not visible in timelines.
+                logger(0, 'This event should not be visible in timelines');
+            } else if(event.type === 'PublicEvent') {
+                result = regexp.test(event.payload.repository.full_name);
+                matched = matched || result;
+            } else if(event.type === 'PullRequestEvent') {
+                result = regexp.test(event.payload.action)
+                      || regexp.test(event.payload.pull_request.state) 
+                      || regexp.test(event.payload.pull_request.title) 
+                      || regexp.test(event.payload.pull_request.body);
+                matched = matched || result;
+            } else if(event.type === 'PushEvent') {
+                event.payload.commits.
+                    forEach(function(commit) {
+                        result = regexp.test(commit.message);
+                        matched = matched || result;
+                    });
+            } else if(event.type === 'ReleaseEvent') {
+                result = regexp.test(event.payload.action)
+                      || regexp.test(event.payload.release.name)
+                      || regexp.test(event.payload.release.body);
+                matched = matched || result;
+            } else if(event.type === 'RepositoryEvent') {
+                result = regexp.test(event.payload.action)
+                      || regexp.test(event.payload.repository.full_name)
+                      || regexp.test(event.payload.repository.description);
+                matched = matched || result;
+            } else if(event.type === 'StatusEvent') {
+                //Events of this type are not visible in timelines.
+                logger(0, 'This event should not be visible in timelines');
+            } else if(event.type === 'TeamAddEvent') {
+                //Events of this type are not visible in timelines.
+                logger(0, 'This event should not be visible in timelines');
+            } else if(event.type === 'WatchEvent') {
+                result = regexp.test(event.payload.action);
+                matched = matched || result;
+            } else {
+                logger(0, 'Event type not used: ' + event.type);
+            }
+        }
+        
+        // API call is for standard part
+        if(APIInfo.standard) {
+            //hard copy
+            logger(9, 'Searching through standard...'); 
+            const eventWithoutPayload = JSON.parse(JSON.stringify(event));
+            delete eventWithoutPayload.payload;
+            result = regexp.test(JSON.stringify(eventWithoutPayload));
+            matched = matched || result;
+        }
+    }
+    
+    return matched;
 }
 
 /***** FUNCTIONS EXECUTED PER SERVER *****/
@@ -356,6 +391,8 @@ function nextGithubRequest(options) {
             on('data', function(chunk) {
                 logger(9, 'received data');
                 data += chunk;
+                
+                
             }).
             on('end', function() {
                 var newevents = JSON.parse(data);

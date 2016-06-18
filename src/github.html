@@ -10,6 +10,13 @@
                 part = parts[i].value;
             }
         }
+        var onlyid;
+        if(document.getElementsByName('onlyid')[0].checked) {
+            onlyid = 'id';
+        } else {
+            onlyid = 'complete';
+        }
+        
         var calls = document.getElementsByName('call');
         var call;
         for(i=0; i < calls.length; i++) {
@@ -22,16 +29,16 @@
         const event_type = document.getElementById("event_type").value;
         const regexp = document.getElementById("regexp").value;
         
-        callToAPI(part, call, event_type, regexp);
+        callToAPI(part, onlyid, call, event_type, regexp);
     }
 
-    function callToAPI(part, call, event_type, regexp){
+    function callToAPI(part, onlyid, call, event_type, regexp){
         var request = new XMLHttpRequest();
         var url;
         if(call === 'one') { 
-            url = "/" + part + "/" + call + "/" + event_type + "/" + regexp;
+            url = "/" + part + "/" + onlyid + "/" + call + "/" + event_type + "/" + regexp;
         } else {
-            url = "/" + part + "/" + call + "/" + regexp;
+            url = "/" + part + "/" + onlyid + "/" + call + "/" + regexp;
         }
         
         request.onreadystatechange = function() {
@@ -54,6 +61,11 @@
         <input type="radio" name="part" value="both" checked>Both 'payload'-part and 'standard'-part</option>
         <input type="radio" name="part" value="payload">Only 'payload'-part</option>
         <input type="radio" name="part" value="standard">Only 'standard'-part</option>
+    </p>
+    
+    <p>
+        Return only the id of the event:
+        <input type="checkbox" name="onlyid" value="all">Only id</option>
     </p>
 
     <p>
