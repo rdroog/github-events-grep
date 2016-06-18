@@ -4,7 +4,10 @@ A real-time regular expression matcher on the GitHub event stream, created for t
 It is possible to search through the GitHub event stream with either an API-call or via the (very basic) UI. The API-calls are explained below, while the UI can be reached through /ui and is self-explanatory. The result is always valid JSON. If an error occurred, this is shown in JSON via '{error : [errorMessage]}'.
 
 ## API calls
-An API-call is: /[part]/[id]/[call]/[regexp]
+An API-call is: /[realtime]/[part]/[id]/[call]/[regexp]
+
+#### [realtime]
+The realtime is either empty or realtime/[length], where the length is in ms with a minimum of 1 second and a maximum of 1 year.
 
 #### [part]
 The part is one of the following:
