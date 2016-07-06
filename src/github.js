@@ -329,7 +329,7 @@ function matchEvent(event, APIInfo) {
     var regexp = APIInfo.regexp;
             
     if(!event.payload || JSON.stringify(event.payload) == '{}'){
-        logger(2, 'Event had no payload: ' + JSON.stringify(event)));
+        logger(2, 'Event had no payload: ' + JSON.stringify(event));
     } else {
         // API call is for custom (payload) part
         if(APIInfo.custom) {
