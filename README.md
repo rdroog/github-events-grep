@@ -39,3 +39,14 @@ Regexp denotes the regular expression. It is always case insensitive.
 * /payload/id/one/PushEvent/test : search on 'test', only in payload, only in PushEvent's. Not real-time. Return only ids.
 * /custom/id/one/PushEvent/test : same one as above.
 * /realtime/600000/payload/id/one/PushEvent/test : search through all found events and for another 10 minutes (real-time) on 'test' in payload and only in PushEvent.
+
+
+# Installation and running
+This package can currently be run if Node is installed with the following packages:
+* rxjs
+* rx-dom
+* rx-node
+* request
+* gen-run
+
+Starting is done via node with: 'node src/github.js', which runs the server. One can then open a browser and perform the requests as stated above.
